@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
  private TextView status, contact;
  private EditText ip, secretInput;
  private volatile byte[] sessionKey;
+ private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
  private final SecureRandom secureRandom=new SecureRandom();
  private DatagramSocket socket;
  private Thread receiver, sender;
@@ -56,19 +57,19 @@ public class MainActivity extends Activity {
   Button pick=new Button(this);pick.setText("Rehberden kişi seç");root.addView(pick);
   contact=new TextView(this);contact.setText("Kişi seçilmedi");root.addView(contact);
   ip=new EditText(this);ip.setSingleLine(true);ip.setHint("Karşı telefonun yerel IP adresi (ör. 192.168.1.20)");ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT);root.addView(ip);
-  secretInput=new EditText(this);secretInput.setSingleLine(true);secretInput.setHint("Her iki telefonda aynı güçlü eşleştirme anahtarı (en az 16 karakter)");root.addView(secretInput);
+  secretInput=new EditText(this);secretInput.setSingleLine(true);secretInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);secretInput.setHint("Her iki telefonda aynı güçlü eşleştirme anahtarı (en az 16 karakter)");root.addView(secretInput);
   Button connect=new Button(this);connect.setText("Hedefi ayarla");root.addView(connect);
   status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
   Button talk=new Button(this);talk.setText("BASILI TUT VE KONUŞ");talk.setTextColor(Color.WHITE);talk.setTextSize(20);talk.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(2,132,199)));root.addView(talk,new LinearLayout.LayoutParams(-1,200));
   setContentView(root);
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
-  String savedSecret=prefs.getString("secret","");if(!savedSecret.isEmpty())secretInput.setText(savedSecret);
-  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;if(savedSecret.length()>=16){try{sessionKey=MessageDigest.getInstance("SHA-256").digest(savedSecret.getBytes("UTF-8"));}catch(Exception ignored){}}status.setText("Hedef kayıtlı: "+peer);}
+  // Do not persist the shared secret in plaintext. Re-enter after each launch.
+  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Hedef kayıtlı: "+peer);}
   WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
-  if(wifi!=null&&wifi.getConnectionInfo()!=null){info.append("\\nBu cihazın yerel IP adresi: "+Formatter.formatIpAddress(wifi.getConnectionInfo().getIpAddress()));}
+  if(wifi!=null&&wifi.getConnectionInfo()!=null){info.append("\nBu cihazın yerel IP adresi: "+Formatter.formatIpAddress(wifi.getConnectionInfo().getIpAddress()));}
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
-  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=MessageDigest.getInstance("SHA-256").digest(secret.getBytes("UTF-8"));InetAddress a=InetAddress.getByName(host);if(a.isAnyLocalAddress()||a.isMulticastAddress())throw new Exception();peer=a.getHostAddress();sessionKey=key;prefs.edit().putString("peer",peer).putString("secret",secret).apply();status.setText("Hedef: "+peer);}catch(Exception e){peer="";status.setText("Geçerli IP girin");}});
+  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=MessageDigest.getInstance("SHA-256").digest(secret.getBytes("UTF-8"));InetAddress a=InetAddress.getByName(host);if(a.isAnyLocalAddress()||a.isMulticastAddress())throw new Exception();peer=a.getHostAddress();sessionKey=key;prefs.edit().putString("peer",peer).apply();status.setText("Hedef: "+peer);}catch(Exception e){peer="";status.setText("Geçerli IP girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
@@ -107,9 +108,13 @@ public class MainActivity extends Activity {
  private byte[] decrypt(byte[] input,int offset,int length)throws Exception {
   if(length<29)throw new IOException("Invalid packet");
   byte[] nonce=Arrays.copyOfRange(input,offset,offset+12);
+  String nonceId=java.util.Base64.getEncoder().encodeToString(nonce);
+  synchronized(seenNonces){if(seenNonces.containsKey(nonceId))throw new IOException("Replay packet");}
   Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
   cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(sessionKey,"AES"),new GCMParameterSpec(128,nonce));
-  return cipher.doFinal(input,offset+12,length-12);
+  byte[] plain=cipher.doFinal(input,offset+12,length-12);
+  synchronized(seenNonces){if(seenNonces.containsKey(nonceId))throw new IOException("Replay packet");seenNonces.put(nonceId,true);}
+  return plain;
  }
  private void stopTalk(){talking.set(false);}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
