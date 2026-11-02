@@ -2,6 +2,12 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.14.0 cihaz kimliği altyapısı
+- Android Keystore üzerinde kalıcı EC P-256 imza anahtarı üretilir; özel anahtar dışarı aktarılmaz.
+- Cihazın genel anahtarından türetilen kısa kimlik parmak izi arayüzde gösterilir.
+- İmza oluşturma/doğrulama yardımcıları eklendi, ancak ağ üzerinden karşı tarafın imzasını doğrulayan protokol ve rehber kimliğiyle güven ilişkisi **henüz uygulanmadı**.
+- APK derlemesi ve gerçek cihaz testi henüz doğrulanmadı.
+
 ## v0.13.0 eşleştirme kodu
 - Aynı ortak anahtardan türetilen kısa güvenlik kodu ekranda gösterilir; kullanıcılar kodu karşılaştırabilir.
 - Kod, gerçek cihaz kimliğinin veya rehber kişisinin doğrulanması yerine geçmez. Kısa kodun kendisi güvenli kimlik doğrulama kanalı değildir.
