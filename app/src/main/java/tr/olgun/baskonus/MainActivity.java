@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
  private volatile boolean listening=true;
  private volatile String peer="";
  private volatile java.util.List<String> peers=java.util.Collections.emptyList();
- private TextView status, contact;
+ private TextView status, contact, recipientsView;
  private EditText ip, secretInput;
  private volatile byte[] sessionKey;
  private volatile long lastReceivedAt=0;
@@ -102,6 +102,8 @@ public class MainActivity extends Activity {
   talkShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);talkShape.setStroke(dp(3),Color.rgb(198,83,83));talk.setBackground(talkShape);
   android.widget.FrameLayout.LayoutParams talkParams=new android.widget.FrameLayout.LayoutParams(dp(220),dp(220),Gravity.CENTER);
   center.addView(talk,talkParams);
+  TextView signature=new TextView(this);signature.setText("Muhammed Yusuf OLGUN");signature.setTextColor(Color.GRAY);signature.setTextSize(13);signature.setGravity(Gravity.CENTER);signature.setPadding(0,dp(36),0,dp(8));root.addView(signature);
+  recipientsView=new TextView(this);recipientsView.setText("Eşleşen alıcılar: Henüz yok");recipientsView.setTextSize(14);recipientsView.setTextColor(Color.DKGRAY);recipientsView.setPadding(dp(8),dp(8),dp(8),dp(8));root.addView(recipientsView);
   root.setPadding(dp(16),dp(28),dp(16),dp(16));setContentView(root);
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
@@ -127,7 +129,7 @@ public class MainActivity extends Activity {
    .setMessage("Her iki telefonda görünen kodun aynı olduğunu karşıdaki kişiyle doğrulayın:\n"+checkCode+"\nBu kod rehber kimliğini tek başına kanıtlamaz.")
    .setPositiveButton("Anladım",null).show();
   verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();peerIdentityCodes.clear();synchronized(seenNonces){seenNonces.clear();}
-  prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
+  prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");updateRecipients();}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();setTalkColor(talking.get());return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
@@ -207,13 +209,18 @@ public class MainActivity extends Activity {
      String current=ip.getText().toString().trim();
      java.util.LinkedHashSet<String> all=new java.util.LinkedHashSet<>();
      for(String x:current.split(",")){if(!x.trim().isEmpty())all.add(x.trim());}
-     if(found.size()!=1){status.setText("Birden fazla cihaz bulundu. Otomatik eşleştirme için ağda yalnızca bir başka cihaz açık olmalı.");return;}
-     all.clear();all.addAll(found);ip.setText(String.join(",",all));
+     all.addAll(found);ip.setText(String.join(",",all));
      connectButton.performClick();
      if(sessionKey!=null&&!peers.isEmpty())testPeers();
     });
    }catch(Exception e){show("Ağ taraması başarısız: "+e.getMessage());}
   },"discovery-scan").start();
+ }
+ private void updateRecipients(){
+  if(recipientsView==null)return;
+  StringBuilder out=new StringBuilder("Yayın hedefleri ("+peers.size()+")");
+  for(String host:peers)out.append("\n• ").append(host);
+  recipientsView.setText(out.toString());
  }
  private void testPeers(){
   if(sessionKey==null||peers.isEmpty()){show("Önce hedefleri ve ortak anahtarı ayarlayın");return;}
