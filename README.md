@@ -10,6 +10,7 @@ Android 8+ için basılı tutarak konuşma prototipi.
 - Rehberden kişi seçme yalnızca isim gösterir; rehber kişisiyle ağ cihazı arasında doğrulanmış eşleştirme YOKTUR.
 - GitHub Actions üzerinden debug APK oluşturma.
 - Gelen ses paketlerinde kaynak IP adresinin ekranda gösterilmesi.
+- Şifreli ping/yanıt ile yapılandırılmış cihazlar arasında ortak anahtar ve erişilebilirlik doğrulaması.
 - Aynı Wi-Fi ağında UDP yayın ile cihaz keşfi (39572 portu); bulunan IP adreslerinin alıcı alanına eklenmesi.
 
 ## Kullanım
@@ -19,6 +20,9 @@ Telefonlar aynı Wi-Fi ağına bağlanmalı. 'Yerel ağda cihaz ara' düğmesiyl
 - Konuşma başlatma yarışına karşı tek aktif gönderici kontrolü. 
 - Küçük ekranlar için kaydırılabilir arayüz. 
 - Anahtar türetme yöntemi değiştiğinden önceki prototip sürümleriyle uyumlu değildir; tüm telefonlarda aynı yeni sürüm kullanılmalıdır.
+
+## Bağlantı doğrulama
+Her iki cihazda da birbirlerinin IP adresleri ve aynı ortak anahtar tanımlanmalı. 'Eşleştirme bağlantısını doğrula' düğmesine basın. Karşı uygulama açıksa ve UDP 39571 erişilebiliyorsa yanıt alınır. Bu işlem rehber kişisinin kimliğini doğrulamaz ve bağlantı kalitesini garanti etmez.
 
 ## Sınırlamalar ve güvenlik
 - Farklı şehirlerde veya mobil internet üzerinde NAT/CGNAT nedeniyle doğrudan bağlantı garanti edilmez. Sinyalleşme ve gerekirse STUN/TURN aktarma altyapısı henüz YOK.
