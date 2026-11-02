@@ -2,6 +2,13 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.15.0 imzalı cihaz kimliği doğrulaması
+- Şifreli yerel ağ PING/PONG paketleri, Android Keystore EC-P256 cihaz genel anahtarını ve SHA256withECDSA imzasını taşır.
+- Gelen imza doğrulanır; ilk bağlantıda kullanıcı karşı cihazın kimlik parmak izini ayrı kanaldan karşılaştırıp onaylar.
+- Onaylanan kimlik, seçilen rehber kaydının URI değeriyle ilişkilendirilerek yerel tercihlerde saklanır; farklı anahtar tespitinde bağlantı reddedilir.
+- Ses gönderimi ve alımı ancak cihaz kimliği onaylandıktan sonra mümkündür.
+- **Sınırlar:** Rehber kaydının sahibi otomatik kanıtlanmaz; ilk kimlik onayı kullanıcıya dayanır. Rehber kaydının URI'si değişirse yeniden onay gerekebilir. Uygulama hâlâ aynı yerel ağ prototipidir. APK ve gerçek telefon testi yapılmadı.
+
 ## v0.14.0 cihaz kimliği altyapısı
 - Android Keystore üzerinde kalıcı EC P-256 imza anahtarı üretilir; özel anahtar dışarı aktarılmaz.
 - Cihazın genel anahtarından türetilen kısa kimlik parmak izi arayüzde gösterilir.
