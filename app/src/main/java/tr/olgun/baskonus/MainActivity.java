@@ -113,7 +113,7 @@ public class MainActivity extends Activity {
   peer=String.join(",",addresses);sessionKey=key;
   verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();synchronized(seenNonces){seenNonces.clear();}
   prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
-  talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){setTalkColor(true);startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
+  talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();setTalkColor(talking.get());return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
   startDiscoveryResponder();
@@ -121,7 +121,7 @@ public class MainActivity extends Activity {
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){contact.setText("Kişi: "+c.getString(0));askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
   if(talkShape==null)return;
-  talkShape.setColors(active?new int[]{Color.rgb(172,239,177),Color.rgb(72,183,103)}:new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
+  talkShape.setColor(active?Color.rgb(152,226,160):Color.rgb(244,152,152));
   talkShape.setStroke(5,active?Color.rgb(54,143,77):Color.rgb(198,83,83));
   talkButton.invalidate();
  }
@@ -175,12 +175,15 @@ public class MainActivity extends Activity {
     int sent=0;
     for(InetAddress dest:destinations){try{ds.send(new DatagramPacket(query,query.length,dest,DISCOVERY_PORT));sent++;}catch(IOException ignored){}}
     if(sent==0)throw new IOException("Yayın paketleri gönderilemedi");
+    java.util.HashSet<String> localAddresses=new java.util.HashSet<>();
+    java.util.Enumeration<NetworkInterface> localIfaces=NetworkInterface.getNetworkInterfaces();
+    while(localIfaces.hasMoreElements()){NetworkInterface ni=localIfaces.nextElement();java.util.Enumeration<InetAddress> own=ni.getInetAddresses();while(own.hasMoreElements())localAddresses.add(own.nextElement().getHostAddress());}
     long until=android.os.SystemClock.elapsedRealtime()+2500;
     byte[] buf=new byte[128];
     while(android.os.SystemClock.elapsedRealtime()<until){
      try{DatagramPacket response=new DatagramPacket(buf,buf.length);ds.receive(response);
       if("BASKONUS_HERE_V1".equals(new String(response.getData(),response.getOffset(),response.getLength(),"UTF-8"))){
-       found.add(response.getAddress().getHostAddress());
+       String candidate=response.getAddress().getHostAddress();if(!localAddresses.contains(candidate))found.add(candidate);
       }
      }catch(SocketTimeoutException ignored){}
     }
