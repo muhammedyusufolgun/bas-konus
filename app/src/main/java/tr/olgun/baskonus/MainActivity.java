@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
-  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Kayıtlı hedefler: "+peer+" (anahtarı tekrar girin)");}
+  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Önce Kişi düğmesinden eşleştirmeyi başlatın");}
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
@@ -194,7 +194,8 @@ public class MainActivity extends Activity {
      for(String x:current.split(",")){if(!x.trim().isEmpty())all.add(x.trim());}
      if(found.size()!=1){status.setText("Birden fazla cihaz bulundu. Otomatik eşleştirme için ağda yalnızca bir başka cihaz açık olmalı.");return;}
      all.clear();all.addAll(found);ip.setText(String.join(",",all));
-     connectButton.performClick();testPeers();
+     connectButton.performClick();
+     if(sessionKey!=null&&!peers.isEmpty())testPeers();
     });
    }catch(Exception e){show("Ağ taraması başarısız: "+e.getMessage());}
   },"discovery-scan").start();
@@ -215,7 +216,7 @@ public class MainActivity extends Activity {
      InetAddress address=InetAddress.getByName(host);
      ds.send(new DatagramPacket(request,request.length,address,PORT));
     }
-    show("Şifreli doğrulama gönderildi. Her iki cihazda hedef ve aynı anahtar ayarlı olmalı.");
+    show("Doğrulama isteği gönderildi; karşı telefonda da Kişi üzerinden eşleştirme yapılmalı.");
    }catch(Exception e){show("Doğrulama gönderilemedi: "+e.getMessage());}
   },"verify-peers").start();
  }
@@ -272,7 +273,7 @@ public class MainActivity extends Activity {
   synchronized(seenNonces){if(seenNonces.containsKey(nonceId))throw new IOException("Replay packet");seenNonces.put(nonceId,true);}
   return plain;
  }
- private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}show("Dinlemede");}
+ private void stopTalk(){boolean wasTalking=talking.getAndSet(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}if(wasTalking)show("Dinlemede");}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
  @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
 }
