@@ -9,6 +9,9 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Bundle;
+import android.content.SharedPreferences;
+import android.net.wifi.WifiManager;
+import android.text.format.Formatter;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.widget.Button;
@@ -49,8 +52,13 @@ public class MainActivity extends Activity {
   status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
   Button talk=new Button(this);talk.setText("BASILI TUT VE KONUŞ");talk.setTextColor(Color.WHITE);talk.setTextSize(20);talk.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(2,132,199)));root.addView(talk,new LinearLayout.LayoutParams(-1,200));
   setContentView(root);
+  SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
+  String savedHost=prefs.getString("peer","");
+  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Hedef kayıtlı: "+peer);}
+  WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
+  if(wifi!=null&&wifi.getConnectionInfo()!=null){info.append("\\nBu cihazın yerel IP adresi: "+Formatter.formatIpAddress(wifi.getConnectionInfo().getIpAddress()));}
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
-  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{InetAddress a=InetAddress.getByName(host);if(a.isAnyLocalAddress()||a.isMulticastAddress())throw new Exception();peer=a.getHostAddress();status.setText("Hedef: "+peer);}catch(Exception e){peer="";status.setText("Geçerli IP girin");}});
+  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{InetAddress a=InetAddress.getByName(host);if(a.isAnyLocalAddress()||a.isMulticastAddress())throw new Exception();peer=a.getHostAddress();prefs.edit().putString("peer",peer).apply();status.setText("Hedef: "+peer);}catch(Exception e){peer="";status.setText("Geçerli IP girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
