@@ -54,6 +54,9 @@ public class MainActivity extends Activity {
  private volatile int originalAudioMode=AudioManager.MODE_NORMAL;
  private volatile boolean originalSpeakerphone=false;
  private AudioManager audioManager;
+ private Button connectButton;
+ private Button talkButton;
+ private android.graphics.drawable.GradientDrawable talkShape;
  private final java.util.Set<String> verifiedPeers=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
  private static final byte[] PING=new byte[]{66,75,80,49};
  private static final byte[] PONG=new byte[]{66,75,80,50};
@@ -73,30 +76,30 @@ public class MainActivity extends Activity {
   getWindow().setStatusBarColor(Color.rgb(3,72,119));
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(32,35,32,30);root.setBackgroundColor(Color.rgb(248,250,252));
   TextView title=new TextView(this);title.setText("BAS-KONUŞ");title.setTextSize(26);title.setTextColor(Color.rgb(2,132,199));title.setGravity(Gravity.CENTER);root.addView(title);
-  TextView info=new TextView(this);info.setText("İlk sürüm: Aynı ağdaki cihazlar için doğrudan ses bağlantısı. Her iki telefonda uygulama açık olmalıdır.");info.setPadding(0,20,0,20);root.addView(info);
   audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
   if(audioManager!=null){originalAudioMode=audioManager.getMode();originalSpeakerphone=audioManager.isSpeakerphoneOn();}
-  Button speaker=new Button(this);speaker.setText("Ses çıkışı: Hoparlör");root.addView(speaker);
-  speaker.setOnClickListener(v->{speakerEnabled=!speakerEnabled;applyAudioRoute();speaker.setText(speakerEnabled?"Ses çıkışı: Hoparlör":"Ses çıkışı: Ahize");});
-  Button pick=new Button(this);pick.setText("Rehberden kişi seç");root.addView(pick);
-  contact=new TextView(this);contact.setText("Kişi seçilmedi");root.addView(contact);
-  ip=new EditText(this);ip.setSingleLine(true);ip.setHint("Alıcı IP adresleri, virgülle ayırın (ör. 192.168.1.20,192.168.1.21)");ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT);root.addView(ip);
-  secretInput=new EditText(this);secretInput.setSingleLine(true);secretInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);secretInput.setHint("Her iki telefonda aynı güçlü eşleştirme anahtarı (en az 16 karakter)");root.addView(secretInput);
-  Button scan=new Button(this);scan.setText("Yerel ağda cihaz ara");root.addView(scan);
-  scan.setOnClickListener(v->scanPeers());
-  Button test=new Button(this);test.setText("Eşleştirme bağlantısını doğrula");root.addView(test);
-  test.setOnClickListener(v->testPeers());
-  Button connect=new Button(this);connect.setText("Hedefi ayarla");root.addView(connect);
-  activity=new TextView(this);activity.setText("Son ses alımı: Henüz yok");activity.setPadding(0,8,0,8);root.addView(activity);
-  status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
-  Button talk=new Button(this);talk.setText("BASILI TUT VE KONUŞ");talk.setTextColor(Color.WHITE);talk.setTextSize(20);talk.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(2,132,199)));root.addView(talk,new LinearLayout.LayoutParams(-1,200));
-  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(root);setContentView(scroll);
+  LinearLayout pickerRow=new LinearLayout(this);pickerRow.setGravity(Gravity.CENTER);root.addView(pickerRow);
+  Button pick=new Button(this);pick.setText("Kişi");pick.setTextAllCaps(false);
+  pick.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(173,216,250)));
+  pickerRow.addView(pick,new LinearLayout.LayoutParams(-2,-2));
+  contact=new TextView(this);contact.setText("Kişi seçilmedi");contact.setGravity(Gravity.CENTER);contact.setPadding(0,18,0,18);root.addView(contact);
+  ip=new EditText(this);secretInput=new EditText(this);
+  Button connect=new Button(this);connectButton=connect;
+  activity=new TextView(this);activity.setText("Son ses alımı: Henüz yok");activity.setGravity(Gravity.CENTER);root.addView(activity);
+  status=new TextView(this);status.setText("Kişi seçerek yerel ağda eşleştirmeyi başlatın");status.setGravity(Gravity.CENTER);status.setPadding(0,20,0,20);root.addView(status);
+  android.widget.FrameLayout center=new android.widget.FrameLayout(this);
+  LinearLayout.LayoutParams centerParams=new LinearLayout.LayoutParams(-1,0,1f);root.addView(center,centerParams);
+  Button talk=new Button(this);talkButton=talk;talk.setText("BAS\nKONUŞ");talk.setTextAllCaps(false);
+  talk.setTextColor(Color.WHITE);talk.setTextSize(25);talk.setElevation(18f);
+  talkShape=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
+  talkShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);talkShape.setStroke(5,Color.rgb(198,83,83));talk.setBackground(talkShape);
+  android.widget.FrameLayout.LayoutParams talkParams=new android.widget.FrameLayout.LayoutParams(250,250,Gravity.CENTER);
+  center.addView(talk,talkParams);
+  root.setPadding(32,55,32,30);setContentView(root);
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
   if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Kayıtlı hedefler: "+peer+" (anahtarı tekrar girin)");}
-  WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
-  if(wifi!=null&&wifi.getConnectionInfo()!=null){info.append("\nBu cihazın yerel IP adresi: "+Formatter.formatIpAddress(wifi.getConnectionInfo().getIpAddress()));}
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
@@ -110,12 +113,30 @@ public class MainActivity extends Activity {
   peer=String.join(",",addresses);sessionKey=key;
   verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();synchronized(seenNonces){seenNonces.clear();}
   prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
-  talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();return true;}return true;});
+  talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){setTalkColor(true);startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
   startDiscoveryResponder();
  }
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())contact.setText("Kişi: "+c.getString(0));}}}}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){contact.setText("Kişi: "+c.getString(0));askForPairingSecret();}}}}}
+ private void setTalkColor(boolean active){
+  if(talkShape==null)return;
+  talkShape.setColors(active?new int[]{Color.rgb(172,239,177),Color.rgb(72,183,103)}:new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
+  talkShape.setStroke(5,active?Color.rgb(54,143,77):Color.rgb(198,83,83));
+  talkButton.invalidate();
+ }
+ private void askForPairingSecret(){
+  final EditText keyField=new EditText(this);keyField.setSingleLine(true);
+  keyField.setHint("Her iki telefonda aynı anahtar (16+ karakter)");
+  keyField.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+  new android.app.AlertDialog.Builder(this).setTitle("Yerel ağ eşleştirme")
+   .setMessage("İki telefonda aynı güçlü anahtarı girin. Rehber adı cihazın kimliğini tek başına doğrulamaz. Aynı Wi-Fi üzerinde yalnızca bir başka cihaz bulunmalıdır.")
+   .setView(keyField).setNegativeButton("Vazgeç",null)
+   .setPositiveButton("Cihaz ara",(dialog,which)->{
+    if(keyField.length()<16){show("Anahtar en az 16 karakter olmalı");return;}
+    secretInput.setText(keyField.getText().toString());scanPeers();
+   }).show();
+ }
  private void startDiscoveryResponder(){
   discoveryThread=new Thread(()->{
    try(DatagramSocket ds=new DatagramSocket(null)){
@@ -168,8 +189,9 @@ public class MainActivity extends Activity {
      String current=ip.getText().toString().trim();
      java.util.LinkedHashSet<String> all=new java.util.LinkedHashSet<>();
      for(String x:current.split(",")){if(!x.trim().isEmpty())all.add(x.trim());}
-     all.addAll(found);ip.setText(String.join(",",all));
-     status.setText(found.size()+" cihaz bulundu. Ortak anahtarı girip Hedefi ayarla seçin.");
+     if(found.size()!=1){status.setText("Birden fazla cihaz bulundu. Otomatik eşleştirme için ağda yalnızca bir başka cihaz açık olmalı.");return;}
+     all.clear();all.addAll(found);ip.setText(String.join(",",all));
+     connectButton.performClick();testPeers();
     });
    }catch(Exception e){show("Ağ taraması başarısız: "+e.getMessage());}
   },"discovery-scan").start();
