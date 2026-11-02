@@ -256,6 +256,7 @@ public class MainActivity extends Activity {
   return code.toString();
  }
  private void confirmIdentity(String host,String code){
+  if(selectedContactId.isEmpty()){show("Rehberden kişi seçilmeden kimlik onaylanamaz");return;}
   String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(selectedContactId,"");
   if(!stored.isEmpty()&&!stored.equals(code)){show("Cihaz kimliği değişti! Eşleştirme reddedildi.");return;}
   if(!stored.isEmpty()){approvedIdentityPeers.add(host);show("Kayıtlı cihaz kimliği doğrulandı");return;}
