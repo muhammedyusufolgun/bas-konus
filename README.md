@@ -2,6 +2,11 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.9.0 doğrulama süresi
+- Doğrulanmış IP adreslerinin ses yetkisi beş dakika sonra sona erer; yeniden doğrulama gerekir.
+- Gönderim başlatırken ve ses alırken yetki süresi kontrol edilir.
+- Bu bir kimlik eşleştirmesi veya internet üzerinden bağlantı çözümü değildir.
+
 ## v0.8.0 doğrulama güncellemesi
 - Her hedef cihaz için ayrı 128-bit rastgele doğrulama isteği oluşturulur.
 - Şifreli yanıtın istekle eşleşmesi ve 10 saniye içinde gelmesi aranır.
