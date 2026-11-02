@@ -50,6 +50,8 @@ public class MainActivity extends Activity {
  private volatile byte[] sessionKey;
  private volatile long lastReceivedAt=0;
  private TextView activity;
+ private volatile boolean speakerEnabled=true;
+ private AudioManager audioManager;
  private final java.util.Set<String> verifiedPeers=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
  private static final byte[] PING=new byte[]{66,75,80,49};
  private static final byte[] PONG=new byte[]{66,75,80,50};
@@ -66,6 +68,9 @@ public class MainActivity extends Activity {
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(32,35,32,30);root.setBackgroundColor(Color.rgb(248,250,252));
   TextView title=new TextView(this);title.setText("BAS-KONUŞ");title.setTextSize(26);title.setTextColor(Color.rgb(2,132,199));title.setGravity(Gravity.CENTER);root.addView(title);
   TextView info=new TextView(this);info.setText("İlk sürüm: Aynı ağdaki cihazlar için doğrudan ses bağlantısı. Her iki telefonda uygulama açık olmalıdır.");info.setPadding(0,20,0,20);root.addView(info);
+  audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
+  Button speaker=new Button(this);speaker.setText("Ses çıkışı: Hoparlör");root.addView(speaker);
+  speaker.setOnClickListener(v->{speakerEnabled=!speakerEnabled;applyAudioRoute();speaker.setText(speakerEnabled?"Ses çıkışı: Hoparlör":"Ses çıkışı: Ahize");});
   Button pick=new Button(this);pick.setText("Rehberden kişi seç");root.addView(pick);
   contact=new TextView(this);contact.setText("Kişi seçilmedi");root.addView(contact);
   ip=new EditText(this);ip.setSingleLine(true);ip.setHint("Alıcı IP adresleri, virgülle ayırın (ör. 192.168.1.20,192.168.1.21)");ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT);root.addView(ip);
@@ -181,17 +186,19 @@ public class MainActivity extends Activity {
   try{socket=new DatagramSocket(null);socket.setReuseAddress(true);socket.bind(new InetSocketAddress(PORT));socket.setSoTimeout(1000);
    int min=AudioTrack.getMinBufferSize(RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
-   track.play();byte[] buf=new byte[1400];
+   applyAudioRoute();track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
     if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());if(Arrays.equals(plain,PING)){verifiedPeers.add(packet.getAddress().getHostAddress());byte[] reply=encrypt(PONG,PONG.length);socket.send(new DatagramPacket(reply,reply.length,packet.getAddress(),packet.getPort()));continue;}if(Arrays.equals(plain,PONG)){verifiedPeers.add(packet.getAddress().getHostAddress());show("Anahtar doğrulandı: "+verifiedPeers.size()+"/"+peers.size()+" cihaz");continue;}if(talking.get()||plain.length!=640||!verifiedPeers.contains(packet.getAddress().getHostAddress()))continue;track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
    }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Alım hatası: "+e.getMessage());}}
    track.stop();track.release();
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
  });receiver.start();}
+ private void applyAudioRoute(){if(audioManager==null)return;audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);audioManager.setSpeakerphoneOn(speakerEnabled);}
  private void startTalk(){if(peers.isEmpty()||sessionKey==null){show("Önce IP ve eşleştirme anahtarını ayarlayın");return;}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);return;}
   if(verifiedPeers.isEmpty()){show("Önce eşleştirme bağlantısını doğrulayın");return;}
   if(!transmitting.compareAndSet(false,true))return;
+  applyAudioRoute();
   talking.set(true);show("Konuşuyorsunuz...");
   sender=new Thread(()->{AudioRecord rec=null;DatagramSocket out=null;try{
    int min=AudioRecord.getMinBufferSize(RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
@@ -228,5 +235,5 @@ public class MainActivity extends Activity {
  }
  private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
- @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();super.onDestroy();}
+ @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(false);audioManager.setMode(AudioManager.MODE_NORMAL);}super.onDestroy();}
 }
