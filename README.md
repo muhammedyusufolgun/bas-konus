@@ -2,6 +2,13 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.11.0 arayüz güncellemesi
+- Tek ekran: açık mavi küçük Kişi düğmesi ve ortada büyük kırmızı yuvarlak bas-konuş düğmesi; basıldığında yeşile döner.
+- Hoparlör çıkışı sabittir, ses çıkışı değiştirme düğmesi kaldırıldı. IP adresi ve eski ayar düğmeleri ana ekranda gösterilmez.
+- Rehberden kişi seçildiğinde ortak anahtar istenir ve aynı Wi-Fi ağında tek başka cihaz bulunursa otomatik IP yapılandırması ve doğrulama başlatılır.
+- **Önemli:** Rehber kişisinin seçilmesi, bulunan cihazın o kişiye ait olduğunu kanıtlamaz. Telefon numarası ile cihaz kimliğinin güvenli eşleştirilmesi henüz yoktur. Birden fazla cihaz bulunan ağlarda otomatik eşleştirme yapılmaz.
+- Farklı şehirlerde/mobil ağlarda bağlantı ve arka planda çalışma henüz desteklenmez. Gerçek cihaz ve APK derleme testi yapılmalıdır.
+
 ## v0.10.0 ses oturumu iyileştirmesi
 - Devam eden konuşma sırasında da her alıcının doğrulama süresi kontrol edilir; süresi dolan hedefe gönderim kesilir.
 - Gönderim hatalarının otomatik durum mesajıyla örtülmesi azaltıldı.
