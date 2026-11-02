@@ -2,6 +2,11 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.6.0
+- Hoparlör ve ahize arasında geçiş düğmesi eklendi; uygulama kapanınca önceki ses modu geri yüklenir.
+- Bu sürüm de yerel ağ odaklıdır. Farklı şehirlerde çalışmak için en az bir tarafta internete erişilebilir genel IPv4 adresi ve yönlendiricide UDP 39571 port yönlendirmesi gerekir; mobil operatör CGNAT bağlantılarında bu yöntem çoğunlukla uygulanamaz.
+- Sınırsız, sunucusuz ve tüm mobil ağlarda garantili bağlantı vaat edilmez. Güvenilir internet eşleştirmesi için kullanıcı onaylı bir sinyalleşme/aktarma hizmeti seçilmelidir.
+
 ## Şu anda çalışan kodun kapsamı
 - Aynı Wi-Fi ağında IP adresleriyle en fazla 20 alıcıya doğrudan UDP ses iletimi.
 - Mikrofon izni ve basılı tutarak konuşma.
