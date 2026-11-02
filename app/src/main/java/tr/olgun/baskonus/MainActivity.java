@@ -37,7 +37,9 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class MainActivity extends Activity {
- private static final int PORT=39571, RATE=16000;
+ private static final int PORT=39571, DISCOVERY_PORT=39572, RATE=16000;
+ private DatagramSocket discoverySocket;
+ private Thread discoveryThread;
  private final AtomicBoolean talking=new AtomicBoolean(false);
  private final AtomicBoolean transmitting=new AtomicBoolean(false);
  private volatile boolean listening=true;
@@ -65,6 +67,8 @@ public class MainActivity extends Activity {
   contact=new TextView(this);contact.setText("Kişi seçilmedi");root.addView(contact);
   ip=new EditText(this);ip.setSingleLine(true);ip.setHint("Alıcı IP adresleri, virgülle ayırın (ör. 192.168.1.20,192.168.1.21)");ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT);root.addView(ip);
   secretInput=new EditText(this);secretInput.setSingleLine(true);secretInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);secretInput.setHint("Her iki telefonda aynı güçlü eşleştirme anahtarı (en az 16 karakter)");root.addView(secretInput);
+  Button scan=new Button(this);scan.setText("Yerel ağda cihaz ara");root.addView(scan);
+  scan.setOnClickListener(v->scanPeers());
   Button connect=new Button(this);connect.setText("Hedefi ayarla");root.addView(connect);
   activity=new TextView(this);activity.setText("Son ses alımı: Henüz yok");activity.setPadding(0,8,0,8);root.addView(activity);
   status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
@@ -92,8 +96,65 @@ public class MainActivity extends Activity {
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
+  startDiscoveryResponder();
  }
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())contact.setText("Kişi: "+c.getString(0));}}}}
+ private void startDiscoveryResponder(){
+  discoveryThread=new Thread(()->{
+   try(DatagramSocket ds=new DatagramSocket(null)){
+    ds.setReuseAddress(true);ds.bind(new InetSocketAddress(DISCOVERY_PORT));
+    ds.setSoTimeout(1000);discoverySocket=ds;
+    byte[] buf=new byte[128];
+    while(listening){
+     try{
+      DatagramPacket p=new DatagramPacket(buf,buf.length);ds.receive(p);
+      if("BASKONUS_DISCOVER_V1".equals(new String(p.getData(),p.getOffset(),p.getLength(),"UTF-8"))){
+       byte[] reply="BASKONUS_HERE_V1".getBytes("UTF-8");
+       ds.send(new DatagramPacket(reply,reply.length,p.getAddress(),p.getPort()));
+      }
+     }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Keşif yanıtı hatası");}
+    }
+   }catch(Exception e){if(listening)show("Keşif portu açılamadı");}
+  },"discovery-responder");discoveryThread.start();
+ }
+ private void scanPeers(){
+  show("Yerel ağda cihazlar aranıyor...");
+  new Thread(()->{
+   java.util.LinkedHashSet<String> found=new java.util.LinkedHashSet<>();
+   try(DatagramSocket ds=new DatagramSocket()){
+    ds.setBroadcast(true);ds.setSoTimeout(450);
+    byte[] query="BASKONUS_DISCOVER_V1".getBytes("UTF-8");
+    java.util.ArrayList<InetAddress> destinations=new java.util.ArrayList<>();
+    destinations.add(InetAddress.getByName("255.255.255.255"));
+    java.util.Enumeration<NetworkInterface> ifaces=NetworkInterface.getNetworkInterfaces();
+    while(ifaces.hasMoreElements()){
+     NetworkInterface ni=ifaces.nextElement();
+     if(!ni.isUp()||ni.isLoopback())continue;
+     for(InterfaceAddress ia:ni.getInterfaceAddresses()){
+      if(ia.getBroadcast()!=null)destinations.add(ia.getBroadcast());
+     }
+    }
+    for(InetAddress dest:destinations)ds.send(new DatagramPacket(query,query.length,dest,DISCOVERY_PORT));
+    long until=android.os.SystemClock.elapsedRealtime()+2500;
+    byte[] buf=new byte[128];
+    while(android.os.SystemClock.elapsedRealtime()<until){
+     try{DatagramPacket response=new DatagramPacket(buf,buf.length);ds.receive(response);
+      if("BASKONUS_HERE_V1".equals(new String(response.getData(),response.getOffset(),response.getLength(),"UTF-8"))){
+       found.add(response.getAddress().getHostAddress());
+      }
+     }catch(SocketTimeoutException ignored){}
+    }
+    runOnUiThread(()->{
+     if(found.isEmpty()){status.setText("Cihaz bulunamadı. Aynı Wi-Fi ağı ve cihazların açık olması gerekir.");return;}
+     String current=ip.getText().toString().trim();
+     java.util.LinkedHashSet<String> all=new java.util.LinkedHashSet<>();
+     for(String x:current.split(",")){if(!x.trim().isEmpty())all.add(x.trim());}
+     all.addAll(found);ip.setText(String.join(",",all));
+     status.setText(found.size()+" cihaz bulundu. Ortak anahtarı girip Hedefi ayarla seçin.");
+    });
+   }catch(Exception e){show("Ağ taraması başarısız: "+e.getMessage());}
+  },"discovery-scan").start();
+ }
  private void startListening(){receiver=new Thread(()->{
   try{socket=new DatagramSocket(null);socket.setReuseAddress(true);socket.bind(new InetSocketAddress(PORT));socket.setSoTimeout(1000);
    int min=AudioTrack.getMinBufferSize(RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
@@ -144,5 +205,5 @@ public class MainActivity extends Activity {
  }
  private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
- @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();super.onDestroy();}
+ @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();super.onDestroy();}
 }
