@@ -26,6 +26,12 @@ import android.provider.ContactsContract;
 import java.net.*;
 import java.io.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class MainActivity extends Activity {
  private static final int PORT=39571, RATE=16000;
@@ -33,7 +39,9 @@ public class MainActivity extends Activity {
  private volatile boolean listening=true;
  private volatile String peer="";
  private TextView status, contact;
- private EditText ip;
+ private EditText ip, secretInput;
+ private volatile byte[] sessionKey;
+ private final SecureRandom secureRandom=new SecureRandom();
  private DatagramSocket socket;
  private Thread receiver, sender;
  private AudioRecord recorder;
@@ -48,17 +56,19 @@ public class MainActivity extends Activity {
   Button pick=new Button(this);pick.setText("Rehberden kişi seç");root.addView(pick);
   contact=new TextView(this);contact.setText("Kişi seçilmedi");root.addView(contact);
   ip=new EditText(this);ip.setSingleLine(true);ip.setHint("Karşı telefonun yerel IP adresi (ör. 192.168.1.20)");ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT);root.addView(ip);
+  secretInput=new EditText(this);secretInput.setSingleLine(true);secretInput.setHint("Her iki telefonda aynı güçlü eşleştirme anahtarı (en az 16 karakter)");root.addView(secretInput);
   Button connect=new Button(this);connect.setText("Hedefi ayarla");root.addView(connect);
   status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
   Button talk=new Button(this);talk.setText("BASILI TUT VE KONUŞ");talk.setTextColor(Color.WHITE);talk.setTextSize(20);talk.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(2,132,199)));root.addView(talk,new LinearLayout.LayoutParams(-1,200));
   setContentView(root);
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
-  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Hedef kayıtlı: "+peer);}
+  String savedSecret=prefs.getString("secret","");if(!savedSecret.isEmpty())secretInput.setText(savedSecret);
+  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;if(savedSecret.length()>=16){try{sessionKey=MessageDigest.getInstance("SHA-256").digest(savedSecret.getBytes("UTF-8"));}catch(Exception ignored){}}status.setText("Hedef kayıtlı: "+peer);}
   WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
   if(wifi!=null&&wifi.getConnectionInfo()!=null){info.append("\\nBu cihazın yerel IP adresi: "+Formatter.formatIpAddress(wifi.getConnectionInfo().getIpAddress()));}
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
-  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{InetAddress a=InetAddress.getByName(host);if(a.isAnyLocalAddress()||a.isMulticastAddress())throw new Exception();peer=a.getHostAddress();prefs.edit().putString("peer",peer).apply();status.setText("Hedef: "+peer);}catch(Exception e){peer="";status.setText("Geçerli IP girin");}});
+  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=MessageDigest.getInstance("SHA-256").digest(secret.getBytes("UTF-8"));InetAddress a=InetAddress.getByName(host);if(a.isAnyLocalAddress()||a.isMulticastAddress())throw new Exception();peer=a.getHostAddress();sessionKey=key;prefs.edit().putString("peer",peer).putString("secret",secret).apply();status.setText("Hedef: "+peer);}catch(Exception e){peer="";status.setText("Geçerli IP girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
@@ -70,12 +80,12 @@ public class MainActivity extends Activity {
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
    track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
-    if(!peer.isEmpty()&&packet.getAddress().getHostAddress().equals(peer)&&!talking.get())track.write(packet.getData(),packet.getOffset(),packet.getLength());
+    if(!peer.isEmpty()&&sessionKey!=null&&packet.getAddress().getHostAddress().equals(peer)&&!talking.get()){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());track.write(plain,0,plain.length);}catch(Exception ignored){}}
    }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Alım hatası: "+e.getMessage());}}
    track.stop();track.release();
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
  });receiver.start();}
- private void startTalk(){if(peer.isEmpty()){show("Önce karşı telefonun IP adresini girin");return;}
+ private void startTalk(){if(peer.isEmpty()||sessionKey==null){show("Önce IP ve eşleştirme anahtarını ayarlayın");return;}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);return;}
   if(!talking.compareAndSet(false,true))return;show("Konuşuyorsunuz...");
   sender=new Thread(()->{AudioRecord rec=null;DatagramSocket out=null;try{
@@ -83,9 +93,23 @@ public class MainActivity extends Activity {
    rec=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();InetAddress address=InetAddress.getByName(peer);byte[] data=new byte[640];rec.startRecording();
-   while(talking.get()){int n=rec.read(data,0,data.length);if(n>0)out.send(new DatagramPacket(data,n,address,PORT));}
+   while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));}}
   }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();show("Dinlemede");}});
   sender.start();
+ }
+ private byte[] encrypt(byte[] input,int length)throws Exception {
+  byte[] nonce=new byte[12];secureRandom.nextBytes(nonce);
+  Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+  cipher.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(sessionKey,"AES"),new GCMParameterSpec(128,nonce));
+  byte[] ciphertext=cipher.doFinal(input,0,length);
+  byte[] packet=new byte[nonce.length+ciphertext.length];System.arraycopy(nonce,0,packet,0,nonce.length);System.arraycopy(ciphertext,0,packet,nonce.length,ciphertext.length);return packet;
+ }
+ private byte[] decrypt(byte[] input,int offset,int length)throws Exception {
+  if(length<29)throw new IOException("Invalid packet");
+  byte[] nonce=Arrays.copyOfRange(input,offset,offset+12);
+  Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+  cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(sessionKey,"AES"),new GCMParameterSpec(128,nonce));
+  return cipher.doFinal(input,offset+12,length-12);
  }
  private void stopTalk(){talking.set(false);}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
