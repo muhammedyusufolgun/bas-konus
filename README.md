@@ -2,6 +2,12 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.12.0 eşleştirme akışı düzeltmeleri
+- Önceden kaydedilmiş IP adresleri ana ekranda gösterilmez.
+- Otomatik hedef yapılandırması başarısızsa doğrulama isteği gönderilmez.
+- Hoparlör yönlendirmesi sabit tutulur; iki cihazda da Kişi akışıyla yapılandırma yapılması gerektiği belirtilir.
+- Rehber kişisi ile cihaz kimliği henüz doğrulanmış biçimde eşleştirilmez. Otomatik keşif yalnızca aynı yerel ağda tek diğer cihaz bulunduğunda çalışır.
+
 ## v0.11.0 arayüz güncellemesi
 - Tek ekran: açık mavi küçük Kişi düğmesi ve ortada büyük kırmızı yuvarlak bas-konuş düğmesi; basıldığında yeşile döner.
 - Hoparlör çıkışı sabittir, ses çıkışı değiştirme düğmesi kaldırıldı. IP adresi ve eski ayar düğmeleri ana ekranda gösterilmez.
