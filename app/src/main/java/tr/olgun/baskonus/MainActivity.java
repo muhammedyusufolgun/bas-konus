@@ -164,7 +164,9 @@ public class MainActivity extends Activity {
   if(sessionKey==null||peers.isEmpty()){show("Önce hedefleri ve ortak anahtarı ayarlayın");return;}
   verifiedPeers.clear();
   new Thread(()->{
-   try(DatagramSocket ds=new DatagramSocket()){
+   try{
+    DatagramSocket ds=socket;
+    if(ds==null||ds.isClosed())throw new IOException("Dinleme soketi hazır değil");
     byte[] request=encrypt(PING,PING.length);
     for(String host:peers){
      InetAddress address=InetAddress.getByName(host);
