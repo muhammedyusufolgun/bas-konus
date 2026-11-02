@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
  private final java.util.Map<String,byte[]> pendingChallenges=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
  private volatile long verificationStartedAt=0;
  private volatile String selectedContactName="";
+ private volatile String selectedContactId="";
  private final java.util.Map<String,String> peerIdentityCodes=new java.util.concurrent.ConcurrentHashMap<>();
  private final java.util.Set<String> approvedIdentityPeers=java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String,Boolean>());
 
@@ -130,7 +131,7 @@ public class MainActivity extends Activity {
   startListening();
   startDiscoveryResponder();
  }
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){selectedContactName=c.getString(0);contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
   if(talkShape==null)return;
   talkShape.setColor(active?Color.rgb(152,226,160):Color.rgb(244,152,152));
@@ -255,16 +256,16 @@ public class MainActivity extends Activity {
   return code.toString();
  }
  private void confirmIdentity(String host,String code){
-  String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(selectedContactName,"");
+  String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(selectedContactId,"");
   if(!stored.isEmpty()&&!stored.equals(code)){show("Cihaz kimliği değişti! Eşleştirme reddedildi.");return;}
   if(!stored.isEmpty()){approvedIdentityPeers.add(host);show("Kayıtlı cihaz kimliği doğrulandı");return;}
   runOnUiThread(()->new android.app.AlertDialog.Builder(this)
    .setTitle("Cihaz kimliğini doğrulayın")
-   .setMessage("Seçilen kişi: "+selectedContactName+"\\nKarşı cihazın kodu: "+code+"\\nBu kodu karşıdaki kişiyle ayrı bir kanaldan karşılaştırın. Yalnızca eşleşiyorsa onaylayın.")
+   .setMessage("Seçilen kişi: "+selectedContactName+"\nKarşı cihazın kodu: "+code+"\nBu kodu karşıdaki kişiyle ayrı bir kanaldan karşılaştırın. Yalnızca eşleşiyorsa onaylayın.")
    .setNegativeButton("Reddet",(d,w)->{verifiedPeers.remove(host);verifiedAt.remove(host);})
    .setPositiveButton("Kodu doğruladım",(d,w)->{
-     if(selectedContactName.isEmpty()){show("Önce rehberden kişi seçin");return;}
-     getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(selectedContactName,code).apply();
+     if(selectedContactId.isEmpty()){show("Önce rehberden kişi seçin");return;}
+     getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(selectedContactId,code).apply();
      approvedIdentityPeers.add(host);show("Cihaz kimliği kişiyle ilişkilendirildi");
    }).show());
  }
