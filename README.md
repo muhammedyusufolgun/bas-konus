@@ -2,6 +2,12 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.7.0 bakım güncellemesi
+- Yerel ağ keşfinde bir yayın adresi başarısız olduğunda diğer adresler denenir.
+- Gelen PCM ses paketleri 16-bit örnek sınırlarına göre kontrol edilir; kısa geçerli çerçeveler de işlenir.
+- Mikrofon okuma hataları gönderim akışında raporlanır.
+- Son sürümün APK derleme ve iki cihazda gerçek ses testi ayrıca doğrulanmalıdır.
+
 ## v0.6.0
 - Hoparlör ve ahize arasında geçiş düğmesi eklendi; uygulama kapanınca önceki ses modu geri yüklenir.
 - Bu sürüm de yerel ağ odaklıdır. Farklı şehirlerde çalışmak için en az bir tarafta internete erişilebilir genel IPv4 adresi ve yönlendiricide UDP 39571 port yönlendirmesi gerekir; mobil operatör CGNAT bağlantılarında bu yöntem çoğunlukla uygulanamaz.
