@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
  private volatile String selectedContactId="";
  private final java.util.Map<String,String> peerIdentityCodes=new java.util.concurrent.ConcurrentHashMap<>();
  private final java.util.Set<String> approvedIdentityPeers=java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String,Boolean>());
+ private final java.util.Set<String> pendingIdentityApprovals=java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String,Boolean>());
 
  private final java.util.Map<String,Long> verifiedAt=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
  private static final long VERIFICATION_TTL_MS=300000;
@@ -124,7 +125,7 @@ public class MainActivity extends Activity {
   new android.app.AlertDialog.Builder(this).setTitle("Eşleştirme güvenlik kodu")
    .setMessage("Her iki telefonda görünen kodun aynı olduğunu karşıdaki kişiyle doğrulayın:\n"+checkCode+"\nBu kod rehber kimliğini tek başına kanıtlamaz.")
    .setPositiveButton("Anladım",null).show();
-  verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();peerIdentityCodes.clear();synchronized(seenNonces){seenNonces.clear();}
+  verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();peerIdentityCodes.clear();synchronized(seenNonces){seenNonces.clear();}
   prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();setTalkColor(talking.get());return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
@@ -256,19 +257,33 @@ public class MainActivity extends Activity {
   return code.toString();
  }
  private void confirmIdentity(String host,String code){
-  if(selectedContactId.isEmpty()){show("Rehberden kişi seçilmeden kimlik onaylanamaz");return;}
-  String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(selectedContactId,"");
-  if(!stored.isEmpty()&&!stored.equals(code)){show("Cihaz kimliği değişti! Eşleştirme reddedildi.");return;}
+  final String contactId=selectedContactId;
+  final String contactName=selectedContactName;
+  if(contactId.isEmpty()){show("Rehberden kişi seçilmeden kimlik onaylanamaz");return;}
+  String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(contactId,"");
+  if(!stored.isEmpty()&&!stored.equals(code)){
+   approvedIdentityPeers.remove(host);verifiedPeers.remove(host);verifiedAt.remove(host);
+   show("Cihaz kimliği değişti! Eşleştirme reddedildi.");return;
+  }
   if(!stored.isEmpty()){approvedIdentityPeers.add(host);show("Kayıtlı cihaz kimliği doğrulandı");return;}
-  runOnUiThread(()->new android.app.AlertDialog.Builder(this)
-   .setTitle("Cihaz kimliğini doğrulayın")
-   .setMessage("Seçilen kişi: "+selectedContactName+"\nKarşı cihazın kodu: "+code+"\nBu kodu karşıdaki kişiyle ayrı bir kanaldan karşılaştırın. Yalnızca eşleşiyorsa onaylayın.")
-   .setNegativeButton("Reddet",(d,w)->{verifiedPeers.remove(host);verifiedAt.remove(host);})
-   .setPositiveButton("Kodu doğruladım",(d,w)->{
-     if(selectedContactId.isEmpty()){show("Önce rehberden kişi seçin");return;}
-     getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(selectedContactId,code).apply();
-     approvedIdentityPeers.add(host);show("Cihaz kimliği kişiyle ilişkilendirildi");
-   }).show());
+  if(!pendingIdentityApprovals.add(host))return;
+  runOnUiThread(()->{
+   if(isFinishing()||isDestroyed()){pendingIdentityApprovals.remove(host);return;}
+   new android.app.AlertDialog.Builder(this)
+    .setTitle("Cihaz kimliğini doğrulayın")
+    .setMessage("Seçilen kişi: "+contactName+"\\nKarşı cihazın kodu: "+code+"\\nKodu ayrı bir kanaldan karşılaştırın. Yalnızca eşleşiyorsa onaylayın.")
+    .setNegativeButton("Reddet",(d,w)->{
+      approvedIdentityPeers.remove(host);verifiedPeers.remove(host);verifiedAt.remove(host);
+    })
+    .setPositiveButton("Kodu doğruladım",(d,w)->{
+      if(!contactId.equals(selectedContactId)||!code.equals(peerIdentityCodes.get(host))){
+       show("Eşleştirme değişti; yeniden deneyin");return;
+      }
+      getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(contactId,code).apply();
+      approvedIdentityPeers.add(host);show("Cihaz kimliği kişiyle ilişkilendirildi");
+    })
+    .setOnDismissListener(d->pendingIdentityApprovals.remove(host)).show();
+  });
  }
  private void startListening(){receiver=new Thread(()->{
   try{socket=new DatagramSocket(null);socket.setReuseAddress(true);socket.bind(new InetSocketAddress(PORT));socket.setSoTimeout(1000);
