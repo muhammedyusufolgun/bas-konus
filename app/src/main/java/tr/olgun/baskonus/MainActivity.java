@@ -46,6 +46,8 @@ public class MainActivity extends Activity {
  private TextView status, contact;
  private EditText ip, secretInput;
  private volatile byte[] sessionKey;
+ private volatile long lastReceivedAt=0;
+ private TextView activity;
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
  private final SecureRandom secureRandom=new SecureRandom();
  private DatagramSocket socket;
@@ -64,6 +66,7 @@ public class MainActivity extends Activity {
   ip=new EditText(this);ip.setSingleLine(true);ip.setHint("Alıcı IP adresleri, virgülle ayırın (ör. 192.168.1.20,192.168.1.21)");ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT);root.addView(ip);
   secretInput=new EditText(this);secretInput.setSingleLine(true);secretInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);secretInput.setHint("Her iki telefonda aynı güçlü eşleştirme anahtarı (en az 16 karakter)");root.addView(secretInput);
   Button connect=new Button(this);connect.setText("Hedefi ayarla");root.addView(connect);
+  activity=new TextView(this);activity.setText("Son ses alımı: Henüz yok");activity.setPadding(0,8,0,8);root.addView(activity);
   status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
   Button talk=new Button(this);talk.setText("BASILI TUT VE KONUŞ");talk.setTextColor(Color.WHITE);talk.setTextSize(20);talk.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(2,132,199)));root.addView(talk,new LinearLayout.LayoutParams(-1,200));
   ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(root);setContentView(scroll);
@@ -78,7 +81,7 @@ public class MainActivity extends Activity {
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
    if(!h.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))throw new Exception("IPv4 required");
    InetAddress a=InetAddress.getByName(h);
-   if(a.isAnyLocalAddress()||a.isMulticastAddress()||a.isLoopbackAddress()||!(a instanceof Inet4Address))throw new Exception("Invalid address");
+   if(a.isAnyLocalAddress()||a.isMulticastAddress()||a.isLoopbackAddress()||a.isLinkLocalAddress()||!(a instanceof Inet4Address))throw new Exception("Invalid address");
    addresses.add(a.getHostAddress());if(addresses.size()>20)throw new Exception("Too many recipients");
   }
   if(addresses.isEmpty())throw new Exception("No recipients");
@@ -97,7 +100,7 @@ public class MainActivity extends Activity {
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
    track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
-    if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())&&!talking.get()){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());track.write(plain,0,plain.length);}catch(Exception ignored){}}
+    if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())&&!talking.get()){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
    }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Alım hatası: "+e.getMessage());}}
    track.stop();track.release();
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
