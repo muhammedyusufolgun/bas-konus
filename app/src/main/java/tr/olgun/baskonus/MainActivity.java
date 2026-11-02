@@ -418,5 +418,27 @@ public class MainActivity extends Activity {
  }
  private void stopTalk(){boolean wasTalking=talking.getAndSet(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}if(wasTalking)show("Dinlemede");}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
+ @Override protected void onStop(){
+  stopTalk();
+  listening=false;
+  if(socket!=null)socket.close();
+  if(discoverySocket!=null)discoverySocket.close();
+  if(reconnectThread!=null)reconnectThread.interrupt();
+  if(sessionKey!=null&&!peers.isEmpty()){
+   Intent background=new Intent(this,BackgroundAudioService.class);
+   try{startForegroundService(background);}catch(Exception e){android.util.Log.w("BasKonus","Service unavailable",e);}
+  }
+  super.onStop();
+ }
+ @Override protected void onStart(){
+  super.onStart();
+  stopService(new Intent(this,BackgroundAudioService.class));
+  if(socket==null||socket.isClosed()){
+   listening=true;
+   startListening();
+   startDiscoveryResponder();
+   startReconnectMonitor();
+  }
+ }
  @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(reconnectThread!=null)reconnectThread.interrupt();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
 }
