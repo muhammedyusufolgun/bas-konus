@@ -1,12 +1,21 @@
 # Bas-Konuş Android
-İlk prototip: Android 8+ için ücretsiz, sunucusuz, aynı yerel ağda tek hedefe bas-konuş ses iletimi.
+
+Android 8+ için basılı tutarak konuşma prototipi.
+
+## Şu anda çalışan kodun kapsamı
+- Aynı Wi-Fi ağında iki cihaz arasında IP adresiyle doğrudan UDP ses iletimi.
+- Mikrofon izni ve basılı tutarak konuşma.
+- AES-256-GCM ile paket şifreleme. Her iki cihazda aynı en az 16 karakterlik eşleştirme anahtarı gereklidir.
+- Karşı cihazın IP adresi ve eşleştirme anahtarı uygulama tercihlerinde saklanır (şu anda güvenli anahtar deposu kullanılmaz).
+- Rehberden kişi seçme yalnızca isim gösterir; rehber kişisiyle ağ cihazı arasında doğrulanmış eşleştirme YOKTUR.
+- GitHub Actions üzerinden debug APK oluşturma.
 
 ## Kullanım
-İki telefonda uygulamayı açın, mikrofon izni verin. Her telefonda karşı cihazın **aynı Wi-Fi üzerindeki yerel IP adresini** girip "Hedefi ayarla" düğmesine basın. "Basılı Tut ve Konuş" ile gönderim yapılır. Rehberden kişi seçme şu an yalnızca kişinin adını gösterir; otomatik eşleştirme sağlamaz.
+İki telefon aynı Wi-Fi ağına bağlanmalı. Her telefonda diğerinin yerel IP adresini ve aynı uzun, rastgele eşleştirme anahtarını girin; "Hedefi ayarla"ya dokunun. Ardından basılı tutarak konuşun. IP adresleri değişirse tekrar ayarlayın.
 
-## Sınırlar
-- **Farklı şehirler/mobil internet:** CGNAT ve NAT nedeniyle doğrudan bağlantı garanti edilmez. Gerçek WebRTC sinyalleşme, STUN/TURN veya erişilebilir aktarım altyapısı gerekir.
-- **Güvenlik:** Bu prototipin UDP PCM sesi şifrelenmemiştir. Güvenilmeyen ağlarda kullanmayın. Karşı tarafın IP adresiyle paket filtreleme kimlik doğrulama değildir.
-- Uygulama ön planda açık olmalıdır. Arka plan dinleme, güvenli eşleştirme, grup görüşmesi, internet üzerinden otomatik bağlantı henüz yoktur.
-- Ağ gecikmesi ve paket kaybına karşı jitter buffer henüz yoktur.
-- APK GitHub Actions çıktısında `Bas-Konus-apk` adıyla oluşur.
+## Sınırlamalar ve güvenlik
+- Farklı şehirlerde veya mobil internet üzerinde NAT/CGNAT nedeniyle doğrudan bağlantı garanti edilmez. Sinyalleşme ve gerekirse STUN/TURN aktarma altyapısı henüz YOK.
+- Çoklu alıcı, arka plan servisi, bildirimler, otomatik eşleştirme ve jitter buffer henüz YOK.
+- Ağ üzerinden şifreli ses taşınsa da kullanıcı kimliği doğrulanmış değildir. IP adresi doğrulama yöntemi değildir. Anahtar, Android SharedPreferences içinde şimdilik düz metin saklanmaktadır; üretim sürümünde Android Keystore ve güvenli eşleştirme gereklidir.
+- Tekrar oynatma saldırısına karşı koruma ve paket sıralama henüz YOK. Güvenilmeyen ağlarda üretim amaçlı kullanmayın.
+- APK'nin cihazda çalıştığı ve GitHub derlemesinin başarılı olduğu ayrıca doğrulanmalıdır.
