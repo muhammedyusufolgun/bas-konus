@@ -57,6 +57,8 @@ public class MainActivity extends Activity {
  private final java.util.Set<String> verifiedPeers=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
  private static final byte[] PING=new byte[]{66,75,80,49};
  private static final byte[] PONG=new byte[]{66,75,80,50};
+ private final java.util.Map<String,byte[]> pendingChallenges=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
+ private volatile long verificationStartedAt=0;
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
  private final SecureRandom secureRandom=new SecureRandom();
  private volatile DatagramSocket socket;
@@ -104,7 +106,7 @@ public class MainActivity extends Activity {
   if(addresses.isEmpty())throw new Exception("No recipients");
   peers=java.util.Collections.unmodifiableList(new java.util.ArrayList<>(addresses));
   peer=String.join(",",addresses);sessionKey=key;
-  verifiedPeers.clear();synchronized(seenNonces){seenNonces.clear();}
+  verifiedPeers.clear();pendingChallenges.clear();synchronized(seenNonces){seenNonces.clear();}
   prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
@@ -173,13 +175,16 @@ public class MainActivity extends Activity {
  private void testPeers(){
   if(sessionKey==null||peers.isEmpty()){show("Önce hedefleri ve ortak anahtarı ayarlayın");return;}
   if(talking.get()){show("Konuşma sırasında doğrulama yenilenemez");return;}
-  verifiedPeers.clear();
+  verifiedPeers.clear();pendingChallenges.clear();verificationStartedAt=android.os.SystemClock.elapsedRealtime();
   new Thread(()->{
    try{
     DatagramSocket ds=socket;
     if(ds==null||ds.isClosed())throw new IOException("Dinleme soketi hazır değil");
-    byte[] request=encrypt(PING,PING.length);
     for(String host:peers){
+     byte[] challenge=new byte[16];secureRandom.nextBytes(challenge);
+     pendingChallenges.put(host,challenge);
+     byte[] plain=new byte[20];System.arraycopy(PING,0,plain,0,4);System.arraycopy(challenge,0,plain,4,16);
+     byte[] request=encrypt(plain,plain.length);
      InetAddress address=InetAddress.getByName(host);
      ds.send(new DatagramPacket(request,request.length,address,PORT));
     }
@@ -193,7 +198,7 @@ public class MainActivity extends Activity {
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
    applyAudioRoute();track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
-    if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());if(Arrays.equals(plain,PING)){verifiedPeers.add(packet.getAddress().getHostAddress());byte[] reply=encrypt(PONG,PONG.length);socket.send(new DatagramPacket(reply,reply.length,packet.getAddress(),packet.getPort()));continue;}if(Arrays.equals(plain,PONG)){verifiedPeers.add(packet.getAddress().getHostAddress());show("Anahtar doğrulandı: "+verifiedPeers.size()+"/"+peers.size()+" cihaz");continue;}if(talking.get()||plain.length<2||plain.length>640||plain.length%2!=0||!verifiedPeers.contains(packet.getAddress().getHostAddress()))continue;track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
+    if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());if(plain.length==20&&Arrays.equals(Arrays.copyOfRange(plain,0,4),PING)){verifiedPeers.add(packet.getAddress().getHostAddress());byte[] answer=plain.clone();System.arraycopy(PONG,0,answer,0,4);byte[] reply=encrypt(answer,answer.length);socket.send(new DatagramPacket(reply,reply.length,packet.getAddress(),packet.getPort()));continue;}if(plain.length==20&&Arrays.equals(Arrays.copyOfRange(plain,0,4),PONG)){String host=packet.getAddress().getHostAddress();byte[] expected=pendingChallenges.get(host);if(expected!=null&&android.os.SystemClock.elapsedRealtime()-verificationStartedAt<10000&&MessageDigest.isEqual(expected,Arrays.copyOfRange(plain,4,20))){pendingChallenges.remove(host);verifiedPeers.add(host);show("Anahtar ve yanıt doğrulandı: "+verifiedPeers.size()+"/"+peers.size()+" cihaz");}continue;}if(talking.get()||plain.length<2||plain.length>640||plain.length%2!=0||!verifiedPeers.contains(packet.getAddress().getHostAddress()))continue;track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
    }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Alım hatası: "+e.getMessage());}}
    track.stop();track.release();
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
