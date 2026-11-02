@@ -51,6 +51,8 @@ public class MainActivity extends Activity {
  private volatile long lastReceivedAt=0;
  private TextView activity;
  private volatile boolean speakerEnabled=true;
+ private volatile int originalAudioMode=AudioManager.MODE_NORMAL;
+ private volatile boolean originalSpeakerphone=false;
  private AudioManager audioManager;
  private final java.util.Set<String> verifiedPeers=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
  private static final byte[] PING=new byte[]{66,75,80,49};
@@ -69,6 +71,7 @@ public class MainActivity extends Activity {
   TextView title=new TextView(this);title.setText("BAS-KONUŞ");title.setTextSize(26);title.setTextColor(Color.rgb(2,132,199));title.setGravity(Gravity.CENTER);root.addView(title);
   TextView info=new TextView(this);info.setText("İlk sürüm: Aynı ağdaki cihazlar için doğrudan ses bağlantısı. Her iki telefonda uygulama açık olmalıdır.");info.setPadding(0,20,0,20);root.addView(info);
   audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
+  if(audioManager!=null){originalAudioMode=audioManager.getMode();originalSpeakerphone=audioManager.isSpeakerphoneOn();}
   Button speaker=new Button(this);speaker.setText("Ses çıkışı: Hoparlör");root.addView(speaker);
   speaker.setOnClickListener(v->{speakerEnabled=!speakerEnabled;applyAudioRoute();speaker.setText(speakerEnabled?"Ses çıkışı: Hoparlör":"Ses çıkışı: Ahize");});
   Button pick=new Button(this);pick.setText("Rehberden kişi seç");root.addView(pick);
@@ -235,5 +238,5 @@ public class MainActivity extends Activity {
  }
  private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
- @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(false);audioManager.setMode(AudioManager.MODE_NORMAL);}super.onDestroy();}
+ @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
 }
