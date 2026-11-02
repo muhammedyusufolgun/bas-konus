@@ -17,6 +17,7 @@ import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.graphics.Color;
 import android.content.Intent;
@@ -27,6 +28,8 @@ import java.net.*;
 import java.io.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.security.MessageDigest;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import javax.crypto.Cipher;
@@ -36,6 +39,7 @@ import javax.crypto.spec.SecretKeySpec;
 public class MainActivity extends Activity {
  private static final int PORT=39571, RATE=16000;
  private final AtomicBoolean talking=new AtomicBoolean(false);
+ private final AtomicBoolean transmitting=new AtomicBoolean(false);
  private volatile boolean listening=true;
  private volatile String peer="";
  private volatile java.util.List<String> peers=java.util.Collections.emptyList();
@@ -62,7 +66,7 @@ public class MainActivity extends Activity {
   Button connect=new Button(this);connect.setText("Hedefi ayarla");root.addView(connect);
   status=new TextView(this);status.setText("Hazır değil");status.setPadding(0,15,0,15);root.addView(status);
   Button talk=new Button(this);talk.setText("BASILI TUT VE KONUŞ");talk.setTextColor(Color.WHITE);talk.setTextSize(20);talk.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(2,132,199)));root.addView(talk,new LinearLayout.LayoutParams(-1,200));
-  setContentView(root);
+  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.addView(root);setContentView(scroll);
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
@@ -70,7 +74,7 @@ public class MainActivity extends Activity {
   WifiManager wifi=(WifiManager)getApplicationContext().getSystemService(WIFI_SERVICE);
   if(wifi!=null&&wifi.getConnectionInfo()!=null){info.append("\nBu cihazın yerel IP adresi: "+Formatter.formatIpAddress(wifi.getConnectionInfo().getIpAddress()));}
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
-  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=MessageDigest.getInstance("SHA-256").digest(secret.getBytes("UTF-8"));java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
+  connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
    if(!h.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))throw new Exception("IPv4 required");
    InetAddress a=InetAddress.getByName(h);
@@ -100,15 +104,22 @@ public class MainActivity extends Activity {
  });receiver.start();}
  private void startTalk(){if(peers.isEmpty()||sessionKey==null){show("Önce IP ve eşleştirme anahtarını ayarlayın");return;}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);return;}
-  if(!talking.compareAndSet(false,true))return;show("Konuşuyorsunuz...");
+  if(!transmitting.compareAndSet(false,true))return;
+  talking.set(true);show("Konuşuyorsunuz...");
   sender=new Thread(()->{AudioRecord rec=null;DatagramSocket out=null;try{
    int min=AudioRecord.getMinBufferSize(RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
    rec=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();java.util.List<InetAddress> targets=new java.util.ArrayList<>();for(String host:peers)targets.add(InetAddress.getByName(host));byte[] data=new byte[640];rec.startRecording();
    while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);for(InetAddress address:targets)out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));}}
-  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();show("Dinlemede");}});
+  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);show("Dinlemede");}});
   sender.start();
+ }
+ private byte[] deriveKey(String password)throws Exception {
+  // A fixed application-domain salt is not a substitute for a unique pairing exchange.
+  PBEKeySpec spec=new PBEKeySpec(password.toCharArray(),"BasKonus-LAN-v2".getBytes("UTF-8"),120000,256);
+  try{return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();}
+  finally{spec.clearPassword();}
  }
  private byte[] encrypt(byte[] input,int length)throws Exception {
   byte[] nonce=new byte[12];secureRandom.nextBytes(nonce);
@@ -128,7 +139,7 @@ public class MainActivity extends Activity {
   synchronized(seenNonces){if(seenNonces.containsKey(nonceId))throw new IOException("Replay packet");seenNonces.put(nonceId,true);}
   return plain;
  }
- private void stopTalk(){talking.set(false);}
+ private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
  @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();super.onDestroy();}
 }
