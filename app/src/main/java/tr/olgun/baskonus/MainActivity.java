@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
   audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
   if(audioManager!=null){originalAudioMode=audioManager.getMode();originalSpeakerphone=audioManager.isSpeakerphoneOn();}
   LinearLayout pickerRow=new LinearLayout(this);pickerRow.setGravity(Gravity.CENTER);root.addView(pickerRow);
-  Button pick=new Button(this);pick.setText("Kişi");pick.setTextAllCaps(false);
+  Button pick=new Button(this);pick.setText("Kişi");pick.setTransformationMethod(null);
   pick.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(173,216,250)));
   pickerRow.addView(pick,new LinearLayout.LayoutParams(-2,-2));
   contact=new TextView(this);contact.setText("Kişi seçilmedi");contact.setGravity(Gravity.CENTER);contact.setPadding(0,dp(9),0,dp(9));root.addView(contact);
@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
   status=new TextView(this);status.setText("Kişi seçerek yerel ağda eşleştirmeyi başlatın");status.setGravity(Gravity.CENTER);status.setPadding(0,dp(10),0,dp(10));root.addView(status);
   android.widget.FrameLayout center=new android.widget.FrameLayout(this);
   LinearLayout.LayoutParams centerParams=new LinearLayout.LayoutParams(-1,0,1f);root.addView(center,centerParams);
-  Button talk=new Button(this);talkButton=talk;talk.setText("BAS\nKONUŞ");talk.setTextAllCaps(false);
+  Button talk=new Button(this);talkButton=talk;talk.setText("BAS\nKONUŞ");talk.setTransformationMethod(null);
   talk.setTextColor(Color.WHITE);talk.setTextSize(25);talk.setElevation(dp(9));
   talkShape=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
   talkShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);talkShape.setStroke(dp(3),Color.rgb(198,83,83));talk.setBackground(talkShape);
