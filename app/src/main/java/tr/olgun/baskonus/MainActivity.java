@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   connect.setOnClickListener(v->{String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=MessageDigest.getInstance("SHA-256").digest(secret.getBytes("UTF-8"));java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
-   if(!h.matches("(?:[0-9]{1,3}\\\\.){3}[0-9]{1,3}"))throw new Exception("IPv4 required");
+   if(!h.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))throw new Exception("IPv4 required");
    InetAddress a=InetAddress.getByName(h);
    if(a.isAnyLocalAddress()||a.isMulticastAddress()||a.isLoopbackAddress()||!(a instanceof Inet4Address))throw new Exception("Invalid address");
    addresses.add(a.getHostAddress());if(addresses.size()>20)throw new Exception("Too many recipients");
