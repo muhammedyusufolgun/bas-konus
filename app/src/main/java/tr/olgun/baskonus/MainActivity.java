@@ -310,13 +310,20 @@ public class MainActivity extends Activity {
  private void confirmIdentity(String host,String code){
   final String contactId=selectedContactId;
   final String contactName=selectedContactName;
-  if(contactId.isEmpty()){show("Rehberden kişi seçilmeden kimlik onaylanamaz");return;}
+  if(contactId.isEmpty()){
+   String trusted=getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).getString(host,"");
+   if(!trusted.isEmpty() && trusted.equals(code)){
+    approvedIdentityPeers.add(host);
+    return;
+   }
+   show("Bilinmeyen cihaz; yeniden rehberden eşleştirin");return;
+  }
   String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(contactId,"");
   if(!stored.isEmpty()&&!stored.equals(code)){
    approvedIdentityPeers.remove(host);verifiedPeers.remove(host);verifiedAt.remove(host);
    show("Cihaz kimliği değişti! Eşleştirme reddedildi.");return;
   }
-  if(!stored.isEmpty()){approvedIdentityPeers.add(host);show("Kayıtlı cihaz kimliği doğrulandı");return;}
+  if(!stored.isEmpty()){approvedIdentityPeers.add(host);getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,code).apply();show("Kayıtlı cihaz kimliği doğrulandı");return;}
   if(!pendingIdentityApprovals.add(host))return;
   runOnUiThread(()->{
    if(isFinishing()||isDestroyed()){pendingIdentityApprovals.remove(host);return;}
@@ -331,6 +338,7 @@ public class MainActivity extends Activity {
        show("Eşleştirme değişti; yeniden deneyin");return;
       }
       getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(contactId,code).apply();
+      getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,code).apply();
       approvedIdentityPeers.add(host);show("Cihaz kimliği kişiyle ilişkilendirildi");
     })
     .setOnDismissListener(d->pendingIdentityApprovals.remove(host)).show();
