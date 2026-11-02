@@ -14,12 +14,18 @@ Android 8+ için basılı tutarak konuşma prototipi.
 - Aynı Wi-Fi ağında UDP yayın ile cihaz keşfi (39572 portu); bulunan IP adreslerinin alıcı alanına eklenmesi.
 
 ## Kullanım
-Telefonlar aynı Wi-Fi ağına bağlanmalı. 'Yerel ağda cihaz ara' düğmesiyle diğer açık uygulamaları arayabilirsiniz. Bazı yönlendiriciler yayın paketlerini veya cihazlar arası trafiği engelleyebilir. Gönderici telefonda alıcıların yerel IPv4 adreslerini virgülle ayırarak girin (en fazla 20). Her telefonda iletişim kuracağı diğer telefonların IP adreslerini ve aynı uzun, rastgele eşleştirme anahtarını girin; "Hedefi ayarla"ya dokunun. Ardından basılı tutarak konuşun. IP adresleri değişirse tekrar ayarlayın.
+Telefonlar aynı Wi-Fi ağına bağlanmalı. 'Yerel ağda cihaz ara' düğmesiyle diğer açık uygulamaları arayabilirsiniz. Bazı yönlendiriciler yayın paketlerini veya cihazlar arası trafiği engelleyebilir. Gönderici telefonda alıcıların yerel IPv4 adreslerini virgülle ayırarak girin (en fazla 20). Her telefonda iletişim kuracağı diğer telefonların IP adreslerini ve aynı uzun, rastgele eşleştirme anahtarını girin; "Hedefi ayarla"ya dokunun. Her iki telefonda 'Hedefi ayarla' işleminden sonra en az bir telefonda 'Eşleştirme bağlantısını doğrula' düğmesine dokunun. Doğrulama tamamlanınca basılı tutarak konuşun. IP adresleri değişirse tekrar ayarlayın.
 
 ## Son iyileştirmeler
 - Konuşma başlatma yarışına karşı tek aktif gönderici kontrolü. 
 - Küçük ekranlar için kaydırılabilir arayüz. 
 - Anahtar türetme yöntemi değiştiğinden önceki prototip sürümleriyle uyumlu değildir; tüm telefonlarda aynı yeni sürüm kullanılmalıdır.
+
+## v0.5.0 güvenlik güncellemesi
+- Ses gönderimi yalnızca şifreli bağlantı doğrulaması tamamlanan IP adreslerine yapılır.
+- Alınan sesin çalınması için de bağlantının doğrulanmış olması gerekir.
+- Hedef değişikliği ve yeniden doğrulama konuşma sürerken engellenir.
+- Bu kontrol ortak anahtarı doğrular; rehber kişisinin gerçek kimliğini doğrulamaz.
 
 ## Bağlantı doğrulama
 Her iki cihazda da birbirlerinin IP adresleri ve aynı ortak anahtar tanımlanmalı. 'Eşleştirme bağlantısını doğrula' düğmesine basın. Karşı uygulama açıksa ve UDP 39571 erişilebiliyorsa yanıt alınır. Bu işlem rehber kişisinin kimliğini doğrulamaz ve bağlantı kalitesini garanti etmez.
