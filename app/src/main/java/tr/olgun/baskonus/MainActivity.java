@@ -252,7 +252,7 @@ public class MainActivity extends Activity {
   java.security.PublicKey key=java.security.KeyFactory.getInstance("EC").generatePublic(new java.security.spec.X509EncodedKeySpec(pub));
   if(!DeviceIdentity.verify(key,Arrays.copyOf(plain,20),signature))throw new IOException("Cihaz imzası geçersiz");
   byte[] digest=MessageDigest.getInstance("SHA-256").digest(pub);
-  StringBuilder code=new StringBuilder();for(int i=0;i<8;i++){if(i>0&&i%2==0)code.append("-");code.append(String.format(java.util.Locale.ROOT,"%02X",digest[i]&255));}
+  StringBuilder code=new StringBuilder();for(int i=0;i<16;i++){if(i>0&&i%2==0)code.append("-");code.append(String.format(java.util.Locale.ROOT,"%02X",digest[i]&255));}
   return code.toString();
  }
  private void confirmIdentity(String host,String code){
@@ -273,6 +273,7 @@ public class MainActivity extends Activity {
  private void startListening(){receiver=new Thread(()->{
   try{socket=new DatagramSocket(null);socket.setReuseAddress(true);socket.bind(new InetSocketAddress(PORT));socket.setSoTimeout(1000);
    int min=AudioTrack.getMinBufferSize(RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
+   if(min<=0)throw new IOException("Ses çıkışı desteklenmiyor: "+min);
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
    applyAudioRoute();track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
@@ -299,7 +300,7 @@ public class MainActivity extends Activity {
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
  });receiver.start();}
  private boolean isPeerVerified(String host){Long at=verifiedAt.get(host);return at!=null&&android.os.SystemClock.elapsedRealtime()-at<VERIFICATION_TTL_MS&&verifiedPeers.contains(host)&&approvedIdentityPeers.contains(host);}
- private void applyAudioRoute(){if(audioManager==null)return;audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);audioManager.setSpeakerphoneOn(speakerEnabled);}
+ private void applyAudioRoute(){if(audioManager==null)return;audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);audioManager.setSpeakerphoneOn(true);}
  private void startTalk(){if(peers.isEmpty()||sessionKey==null){show("Önce Kişi üzerinden eşleştirme yapın");return;}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);return;}
   boolean anyVerified=false;for(String host:peers){if(isPeerVerified(host)){anyVerified=true;break;}}
@@ -309,6 +310,7 @@ public class MainActivity extends Activity {
   talking.set(true);show("Konuşuyorsunuz...");
   sender=new Thread(()->{AudioRecord rec=null;DatagramSocket out=null;try{
    int min=AudioRecord.getMinBufferSize(RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
+   if(min<=0)throw new IOException("Mikrofon biçimi desteklenmiyor: "+min);
    rec=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();java.util.List<InetAddress> targets=new java.util.ArrayList<>();for(String host:peers)if(isPeerVerified(host))targets.add(InetAddress.getByName(host));byte[] data=new byte[640];rec.startRecording();
