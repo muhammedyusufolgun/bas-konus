@@ -108,7 +108,24 @@ public class MainActivity extends Activity {
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
-  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Önce Kişi düğmesinden eşleştirmeyi başlatın");}
+  try {
+   SessionVault.Session restored=SessionVault.load(this);
+   if(restored!=null){
+    java.util.LinkedHashSet<String> saved=new java.util.LinkedHashSet<>();
+    for(String h:restored.hosts.split(",")){
+     String host=h.trim();
+     if(host.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))saved.add(host);
+    }
+    if(!saved.isEmpty() && saved.size()<=20){
+     peers=java.util.Collections.unmodifiableList(new java.util.ArrayList<>(saved));
+     peer=String.join(",",saved);
+     sessionKey=restored.key;
+     ip.setText(peer);
+     status.setText("Kayıtlı cihazlarla bağlantı doğrulanıyor");
+     updateRecipients();
+    }
+   }
+  }catch(Exception e){status.setText("Oturum geri yüklenemedi; yeniden eşleştirin");}
 
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   new Thread(()->{try{String fp=DeviceIdentity.fingerprint();runOnUiThread(()->activity.setText("Bu cihazın kimlik kodu: "+fp));}catch(Exception e){show("Cihaz kimliği oluşturulamadı");}},"device-identity").start();
@@ -129,7 +146,7 @@ public class MainActivity extends Activity {
    .setMessage("Her iki telefonda görünen kodun aynı olduğunu karşıdaki kişiyle doğrulayın:\n"+checkCode+"\nBu kod rehber kimliğini tek başına kanıtlamaz.")
    .setPositiveButton("Anladım",null).show();
   verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();peerIdentityCodes.clear();synchronized(seenNonces){seenNonces.clear();}
-  prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");updateRecipients();}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
+  prefs.edit().putString("peer",peer).apply();SessionVault.save(this,peer,sessionKey);status.setText("Hazır: "+peers.size()+" alıcı");updateRecipients();}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();setTalkColor(talking.get());return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
