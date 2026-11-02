@@ -2,6 +2,11 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.8.0 doğrulama güncellemesi
+- Her hedef cihaz için ayrı 128-bit rastgele doğrulama isteği oluşturulur.
+- Şifreli yanıtın istekle eşleşmesi ve 10 saniye içinde gelmesi aranır.
+- Karşılıklı doğrulama hâlâ paylaşılan gizli anahtara dayanır; rehber kimliğiyle kalıcı kriptografik eşleştirme değildir.
+
 ## v0.7.0 bakım güncellemesi
 - Yerel ağ keşfinde bir yayın adresi başarısız olduğunda diğer adresler denenir.
 - Gelen PCM ses paketleri 16-bit örnek sınırlarına göre kontrol edilir; kısa geçerli çerçeveler de işlenir.
