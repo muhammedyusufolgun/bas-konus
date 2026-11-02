@@ -104,6 +104,7 @@ public class MainActivity extends Activity {
   if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Önce Kişi düğmesinden eşleştirmeyi başlatın");}
 
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
+  new Thread(()->{try{String fp=DeviceIdentity.fingerprint();runOnUiThread(()->activity.setText("Bu cihazın kimlik kodu: "+fp));}catch(Exception e){show("Cihaz kimliği oluşturulamadı");}},"device-identity").start();
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
    if(!h.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))throw new Exception("IPv4 required");
