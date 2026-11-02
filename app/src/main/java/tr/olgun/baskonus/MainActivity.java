@@ -133,11 +133,11 @@ public class MainActivity extends Activity {
   startListening();
   startDiscoveryResponder();
  }
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){stopTalk();verifiedPeers.clear();verifiedAt.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();pendingChallenges.clear();peerIdentityCodes.clear();peers=java.util.Collections.emptyList();sessionKey=null;ip.setText("");secretInput.setText("");selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
   if(talkShape==null)return;
   talkShape.setColor(active?Color.rgb(152,226,160):Color.rgb(244,152,152));
-  talkShape.setStroke(5,active?Color.rgb(54,143,77):Color.rgb(198,83,83));
+  talkShape.setStroke(dp(3),active?Color.rgb(54,143,77):Color.rgb(198,83,83));
   talkButton.invalidate();
  }
  private void askForPairingSecret(){
