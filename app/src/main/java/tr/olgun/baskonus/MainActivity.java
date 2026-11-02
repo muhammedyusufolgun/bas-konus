@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
  private final java.util.Map<String,byte[]> pendingChallenges=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
  private volatile long verificationStartedAt=0;
  private volatile String selectedContactName="";
- private volatile String pairedContactName="";
+
  private final java.util.Map<String,Long> verifiedAt=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
  private static final long VERIFICATION_TTL_MS=300000;
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
@@ -102,8 +102,7 @@ public class MainActivity extends Activity {
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
   if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Önce Kişi düğmesinden eşleştirmeyi başlatın");}
-  pairedContactName=prefs.getString("paired_contact","");
-  if(!pairedContactName.isEmpty())contact.setText("Son eşleştirilen kişi: "+pairedContactName+" (yeniden doğrulama gerekli)");
+
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
@@ -115,6 +114,12 @@ public class MainActivity extends Activity {
   if(addresses.isEmpty())throw new Exception("No recipients");
   peers=java.util.Collections.unmodifiableList(new java.util.ArrayList<>(addresses));
   peer=String.join(",",addresses);sessionKey=key;
+  byte[] digest=MessageDigest.getInstance("SHA-256").digest(key);
+  StringBuilder code=new StringBuilder();for(int i=0;i<4;i++){if(i>0)code.append("-");code.append(String.format(java.util.Locale.ROOT,"%02X",digest[i]));}
+  final String checkCode=code.toString();
+  new android.app.AlertDialog.Builder(this).setTitle("Eşleştirme güvenlik kodu")
+   .setMessage("Her iki telefonda görünen kodun aynı olduğunu karşıdaki kişiyle doğrulayın:\n"+checkCode+"\nBu kod rehber kimliğini tek başına kanıtlamaz.")
+   .setPositiveButton("Anladım",null).show();
   verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();synchronized(seenNonces){seenNonces.clear();}
   prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();setTalkColor(talking.get());return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
