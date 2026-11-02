@@ -2,6 +2,12 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.18.0 eşleştirme güvenliği
+- Aynı cihaz için eşzamanlı kimlik onay pencereleri engellendi.
+- Onay beklerken kişi veya cihaz kimliği değişirse eski onay reddedilir.
+- Kayıtlı kimlik uyuşmazlığında cihazın geçici bağlantı yetkisi iptal edilir.
+- APK derlemesi ve gerçek telefon testi henüz doğrulanmadı.
+
 ## v0.16.0 güvenlik ve CI kontrolü
 - Cihaz kimliği parmak izi 64 bitten 128 bite genişletildi; eski onaylı kısa kodlar yeniden doğrulanmalıdır.
 - Rehberden kişi seçilmemişse cihaz kimliği onaylanamaz.
