@@ -74,7 +74,7 @@ public class MainActivity extends Activity {
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
  private final SecureRandom secureRandom=new SecureRandom();
  private volatile DatagramSocket socket;
- private Thread receiver, sender;
+ private Thread receiver, sender, reconnectThread;
  private AudioRecord recorder;
  private final Object lock=new Object();
  private static final int REQ_AUDIO=11, REQ_CONTACT=12;
@@ -134,6 +134,7 @@ public class MainActivity extends Activity {
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
   startDiscoveryResponder();
+  startReconnectMonitor();
  }
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){stopTalk();verifiedPeers.clear();verifiedAt.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();pendingChallenges.clear();peerIdentityCodes.clear();peers=java.util.Collections.emptyList();sessionKey=null;ip.setText("");secretInput.setText("");selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
@@ -221,6 +222,31 @@ public class MainActivity extends Activity {
   StringBuilder out=new StringBuilder("Yayın hedefleri ("+peers.size()+")");
   for(String host:peers)out.append("\n• ").append(host);
   recipientsView.setText(out.toString());
+ }
+ private void startReconnectMonitor(){
+  reconnectThread=new Thread(()->{
+   while(listening){
+    try{
+     Thread.sleep(30000);
+     if(!listening || talking.get() || sessionKey==null || peers.isEmpty())continue;
+     DatagramSocket ds=socket;
+     if(ds==null || ds.isClosed())continue;
+     for(String host:peers){
+      if(isPeerVerified(host))continue;
+      try{
+       byte[] challenge=new byte[16];
+       secureRandom.nextBytes(challenge);
+       pendingChallenges.put(host,challenge);
+       verificationStartedAt=android.os.SystemClock.elapsedRealtime();
+       byte[] plain=identityPacket(PING,challenge);
+       byte[] packet=encrypt(plain,plain.length);
+       ds.send(new DatagramPacket(packet,packet.length,InetAddress.getByName(host),PORT));
+      }catch(Exception ignored){}
+     }
+    }catch(InterruptedException e){Thread.currentThread().interrupt();break;}
+   }
+  },"reconnect-monitor");
+  reconnectThread.start();
  }
  private void testPeers(){
   if(sessionKey==null||peers.isEmpty()){show("Önce hedefleri ve ortak anahtarı ayarlayın");return;}
@@ -367,5 +393,5 @@ public class MainActivity extends Activity {
  }
  private void stopTalk(){boolean wasTalking=talking.getAndSet(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}if(wasTalking)show("Dinlemede");}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
- @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
+ @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(reconnectThread!=null)reconnectThread.interrupt();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
 }
