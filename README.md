@@ -2,6 +2,11 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.13.0 eşleştirme kodu
+- Aynı ortak anahtardan türetilen kısa güvenlik kodu ekranda gösterilir; kullanıcılar kodu karşılaştırabilir.
+- Kod, gerçek cihaz kimliğinin veya rehber kişisinin doğrulanması yerine geçmez. Kısa kodun kendisi güvenli kimlik doğrulama kanalı değildir.
+- APK derlemesi ve gerçek cihaz testi henüz doğrulanmamıştır.
+
 ## v0.12.0 eşleştirme akışı düzeltmeleri
 - Önceden kaydedilmiş IP adresleri ana ekranda gösterilmez.
 - Otomatik hedef yapılandırması başarısızsa doğrulama isteği gönderilmez.
