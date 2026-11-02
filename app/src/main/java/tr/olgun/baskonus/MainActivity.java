@@ -62,6 +62,8 @@ public class MainActivity extends Activity {
  private static final byte[] PONG=new byte[]{66,75,80,50};
  private final java.util.Map<String,byte[]> pendingChallenges=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
  private volatile long verificationStartedAt=0;
+ private volatile String selectedContactName="";
+ private volatile String pairedContactName="";
  private final java.util.Map<String,Long> verifiedAt=java.util.Collections.synchronizedMap(new java.util.HashMap<>());
  private static final long VERIFICATION_TTL_MS=300000;
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
@@ -100,6 +102,8 @@ public class MainActivity extends Activity {
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
   if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Önce Kişi düğmesinden eşleştirmeyi başlatın");}
+  pairedContactName=prefs.getString("paired_contact","");
+  if(!pairedContactName.isEmpty())contact.setText("Son eşleştirilen kişi: "+pairedContactName+" (yeniden doğrulama gerekli)");
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
   for(String raw:host.split(",")){String h=raw.trim();if(h.isEmpty())continue;
@@ -118,7 +122,7 @@ public class MainActivity extends Activity {
   startListening();
   startDiscoveryResponder();
  }
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){contact.setText("Kişi: "+c.getString(0));askForPairingSecret();}}}}}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){selectedContactName=c.getString(0);contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
   if(talkShape==null)return;
   talkShape.setColor(active?Color.rgb(152,226,160):Color.rgb(244,152,152));
