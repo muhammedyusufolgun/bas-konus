@@ -2,6 +2,11 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.10.0 ses oturumu iyileştirmesi
+- Devam eden konuşma sırasında da her alıcının doğrulama süresi kontrol edilir; süresi dolan hedefe gönderim kesilir.
+- Gönderim hatalarının otomatik durum mesajıyla örtülmesi azaltıldı.
+- APK derleme ve gerçek cihaz doğrulaması gereklidir.
+
 ## v0.9.0 doğrulama süresi
 - Doğrulanmış IP adreslerinin ses yetkisi beş dakika sonra sona erer; yeniden doğrulama gerekir.
 - Gönderim başlatırken ve ses alırken yetki süresi kontrol edilir.
