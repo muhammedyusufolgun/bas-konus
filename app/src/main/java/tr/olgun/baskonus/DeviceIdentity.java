@@ -33,7 +33,7 @@ public final class DeviceIdentity {
  public static String fingerprint() throws Exception {
   byte[] digest=MessageDigest.getInstance("SHA-256").digest(getOrCreatePublicKey().getEncoded());
   StringBuilder result=new StringBuilder();
-  for(int i=0;i<8;i++){if(i>0&&i%2==0)result.append('-');result.append(String.format(java.util.Locale.ROOT,"%02X",digest[i]&255));}
+  for(int i=0;i<16;i++){if(i>0&&i%2==0)result.append('-');result.append(String.format(java.util.Locale.ROOT,"%02X",digest[i]&255));}
   return result.toString();
  }
  public static byte[] sign(byte[] message) throws Exception {
