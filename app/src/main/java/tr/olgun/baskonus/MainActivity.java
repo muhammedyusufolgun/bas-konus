@@ -219,8 +219,8 @@ public class MainActivity extends Activity {
    rec=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();java.util.List<InetAddress> targets=new java.util.ArrayList<>();for(String host:peers)if(isPeerVerified(host))targets.add(InetAddress.getByName(host));byte[] data=new byte[640];rec.startRecording();
-   while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);for(InetAddress address:targets)out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));}else if(n<0)throw new IOException("Mikrofon okuma hatası: "+n);}
-  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);show("Dinlemede");}});
+   while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);int delivered=0;for(InetAddress address:targets){if(isPeerVerified(address.getHostAddress())){out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));delivered++;}}if(delivered==0){show("Tüm bağlantı doğrulamalarının süresi doldu");break;}}else if(n<0){if(!talking.get())break;throw new IOException("Mikrofon okuma hatası: "+n);}}
+  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);}});
   sender.start();
  }
  private byte[] deriveKey(String password)throws Exception {
@@ -247,7 +247,7 @@ public class MainActivity extends Activity {
   synchronized(seenNonces){if(seenNonces.containsKey(nonceId))throw new IOException("Replay packet");seenNonces.put(nonceId,true);}
   return plain;
  }
- private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}}
+ private void stopTalk(){talking.set(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}show("Dinlemede");}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
  @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
 }
