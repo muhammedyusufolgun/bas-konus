@@ -59,7 +59,7 @@ public class MainActivity extends Activity {
  private static final byte[] PONG=new byte[]{66,75,80,50};
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
  private final SecureRandom secureRandom=new SecureRandom();
- private DatagramSocket socket;
+ private volatile DatagramSocket socket;
  private Thread receiver, sender;
  private AudioRecord recorder;
  private final Object lock=new Object();
@@ -147,7 +147,9 @@ public class MainActivity extends Activity {
       if(ia.getBroadcast()!=null)destinations.add(ia.getBroadcast());
      }
     }
-    for(InetAddress dest:destinations)ds.send(new DatagramPacket(query,query.length,dest,DISCOVERY_PORT));
+    int sent=0;
+    for(InetAddress dest:destinations){try{ds.send(new DatagramPacket(query,query.length,dest,DISCOVERY_PORT));sent++;}catch(IOException ignored){}}
+    if(sent==0)throw new IOException("Yayın paketleri gönderilemedi");
     long until=android.os.SystemClock.elapsedRealtime()+2500;
     byte[] buf=new byte[128];
     while(android.os.SystemClock.elapsedRealtime()<until){
@@ -191,7 +193,7 @@ public class MainActivity extends Activity {
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
    applyAudioRoute();track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
-    if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());if(Arrays.equals(plain,PING)){verifiedPeers.add(packet.getAddress().getHostAddress());byte[] reply=encrypt(PONG,PONG.length);socket.send(new DatagramPacket(reply,reply.length,packet.getAddress(),packet.getPort()));continue;}if(Arrays.equals(plain,PONG)){verifiedPeers.add(packet.getAddress().getHostAddress());show("Anahtar doğrulandı: "+verifiedPeers.size()+"/"+peers.size()+" cihaz");continue;}if(talking.get()||plain.length!=640||!verifiedPeers.contains(packet.getAddress().getHostAddress()))continue;track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
+    if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());if(Arrays.equals(plain,PING)){verifiedPeers.add(packet.getAddress().getHostAddress());byte[] reply=encrypt(PONG,PONG.length);socket.send(new DatagramPacket(reply,reply.length,packet.getAddress(),packet.getPort()));continue;}if(Arrays.equals(plain,PONG)){verifiedPeers.add(packet.getAddress().getHostAddress());show("Anahtar doğrulandı: "+verifiedPeers.size()+"/"+peers.size()+" cihaz");continue;}if(talking.get()||plain.length<2||plain.length>640||plain.length%2!=0||!verifiedPeers.contains(packet.getAddress().getHostAddress()))continue;track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
    }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Alım hatası: "+e.getMessage());}}
    track.stop();track.release();
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
@@ -208,7 +210,7 @@ public class MainActivity extends Activity {
    rec=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();java.util.List<InetAddress> targets=new java.util.ArrayList<>();for(String host:peers)if(verifiedPeers.contains(host))targets.add(InetAddress.getByName(host));byte[] data=new byte[640];rec.startRecording();
-   while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);for(InetAddress address:targets)out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));}}
+   while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);for(InetAddress address:targets)out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));}else if(n<0)throw new IOException("Mikrofon okuma hatası: "+n);}
   }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);show("Dinlemede");}});
   sender.start();
  }
