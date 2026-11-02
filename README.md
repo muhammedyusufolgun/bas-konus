@@ -2,6 +2,12 @@
 
 Android 8+ için basılı tutarak konuşma prototipi.
 
+## v0.16.0 güvenlik ve CI kontrolü
+- Cihaz kimliği parmak izi 64 bitten 128 bite genişletildi; eski onaylı kısa kodlar yeniden doğrulanmalıdır.
+- Rehberden kişi seçilmemişse cihaz kimliği onaylanamaz.
+- GitHub Actions derlemesine Android lint kontrolü eklendi; lint HTML raporu ayrıca yüklenir.
+- Bu değişikliklerin derleme/lint sonucu henüz doğrulanmamıştır; GitHub Actions sonuçları kontrol edilmelidir.
+
 ## v0.15.0 imzalı cihaz kimliği doğrulaması
 - Şifreli yerel ağ PING/PONG paketleri, Android Keystore EC-P256 cihaz genel anahtarını ve SHA256withECDSA imzasını taşır.
 - Gelen imza doğrulanır; ilk bağlantıda kullanıcı karşı cihazın kimlik parmak izini ayrı kanaldan karşılaştırıp onaylar.
