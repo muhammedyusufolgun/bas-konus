@@ -38,6 +38,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class MainActivity extends Activity {
  private static final int PORT=39571, DISCOVERY_PORT=39572, RATE=16000;
+ private int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
  private DatagramSocket discoverySocket;
  private Thread discoveryThread;
  private final AtomicBoolean talking=new AtomicBoolean(false);
@@ -80,7 +81,7 @@ public class MainActivity extends Activity {
  @Override public void onCreate(Bundle state){
   super.onCreate(state);
   getWindow().setStatusBarColor(Color.rgb(3,72,119));
-  LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(32,35,32,30);root.setBackgroundColor(Color.rgb(248,250,252));
+  LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(20),dp(16),dp(16));root.setBackgroundColor(Color.rgb(248,250,252));
   TextView title=new TextView(this);title.setText("BAS-KONUŞ");title.setTextSize(26);title.setTextColor(Color.rgb(2,132,199));title.setGravity(Gravity.CENTER);root.addView(title);
   audioManager=(AudioManager)getSystemService(AUDIO_SERVICE);
   if(audioManager!=null){originalAudioMode=audioManager.getMode();originalSpeakerphone=audioManager.isSpeakerphoneOn();}
@@ -88,20 +89,20 @@ public class MainActivity extends Activity {
   Button pick=new Button(this);pick.setText("Kişi");pick.setTextAllCaps(false);
   pick.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(173,216,250)));
   pickerRow.addView(pick,new LinearLayout.LayoutParams(-2,-2));
-  contact=new TextView(this);contact.setText("Kişi seçilmedi");contact.setGravity(Gravity.CENTER);contact.setPadding(0,18,0,18);root.addView(contact);
+  contact=new TextView(this);contact.setText("Kişi seçilmedi");contact.setGravity(Gravity.CENTER);contact.setPadding(0,dp(9),0,dp(9));root.addView(contact);
   ip=new EditText(this);secretInput=new EditText(this);
   Button connect=new Button(this);connectButton=connect;
   activity=new TextView(this);activity.setText("Son ses alımı: Henüz yok");activity.setGravity(Gravity.CENTER);root.addView(activity);
-  status=new TextView(this);status.setText("Kişi seçerek yerel ağda eşleştirmeyi başlatın");status.setGravity(Gravity.CENTER);status.setPadding(0,20,0,20);root.addView(status);
+  status=new TextView(this);status.setText("Kişi seçerek yerel ağda eşleştirmeyi başlatın");status.setGravity(Gravity.CENTER);status.setPadding(0,dp(10),0,dp(10));root.addView(status);
   android.widget.FrameLayout center=new android.widget.FrameLayout(this);
   LinearLayout.LayoutParams centerParams=new LinearLayout.LayoutParams(-1,0,1f);root.addView(center,centerParams);
   Button talk=new Button(this);talkButton=talk;talk.setText("BAS\nKONUŞ");talk.setTextAllCaps(false);
-  talk.setTextColor(Color.WHITE);talk.setTextSize(25);talk.setElevation(18f);
+  talk.setTextColor(Color.WHITE);talk.setTextSize(25);talk.setElevation(dp(9));
   talkShape=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
-  talkShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);talkShape.setStroke(5,Color.rgb(198,83,83));talk.setBackground(talkShape);
-  android.widget.FrameLayout.LayoutParams talkParams=new android.widget.FrameLayout.LayoutParams(250,250,Gravity.CENTER);
+  talkShape.setShape(android.graphics.drawable.GradientDrawable.OVAL);talkShape.setStroke(dp(3),Color.rgb(198,83,83));talk.setBackground(talkShape);
+  android.widget.FrameLayout.LayoutParams talkParams=new android.widget.FrameLayout.LayoutParams(dp(220),dp(220),Gravity.CENTER);
   center.addView(talk,talkParams);
-  root.setPadding(32,55,32,30);setContentView(root);
+  root.setPadding(dp(16),dp(28),dp(16),dp(16));setContentView(root);
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
