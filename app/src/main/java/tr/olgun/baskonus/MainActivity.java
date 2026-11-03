@@ -156,7 +156,7 @@ public class MainActivity extends Activity {
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){stopTalk();verifiedPeers.clear();verifiedAt.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();pendingChallenges.clear();peerIdentityCodes.clear();peers=java.util.Collections.emptyList();sessionKey=null;ip.setText("");secretInput.setText("");selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
   if(talkShape==null)return;
-  talkShape.setColor(active?Color.rgb(152,226,160):Color.rgb(244,152,152));
+  talkShape.setColors(active?new int[]{Color.rgb(34,197,94),Color.rgb(34,197,94)}:new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
   talkShape.setStroke(dp(3),active?Color.rgb(54,143,77):Color.rgb(198,83,83));
   talkButton.invalidate();
  }
@@ -389,7 +389,7 @@ public class MainActivity extends Activity {
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();java.util.List<InetAddress> targets=new java.util.ArrayList<>();for(String host:peers)if(isPeerVerified(host))targets.add(InetAddress.getByName(host));byte[] data=new byte[640];rec.startRecording();
    while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);int delivered=0;for(InetAddress address:targets){if(isPeerVerified(address.getHostAddress())){out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));delivered++;}}if(delivered==0){show("Tüm bağlantı doğrulamalarının süresi doldu");break;}}else if(n<0){if(!talking.get())break;throw new IOException("Mikrofon okuma hatası: "+n);}}
-  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);}});
+  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);runOnUiThread(()->setTalkColor(false));}});
   sender.start();
  }
  private byte[] deriveKey(String password)throws Exception {
