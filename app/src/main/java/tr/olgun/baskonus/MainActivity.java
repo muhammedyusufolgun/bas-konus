@@ -75,6 +75,7 @@ public class MainActivity extends Activity {
  private final SecureRandom secureRandom=new SecureRandom();
  private volatile DatagramSocket socket;
  private Thread receiver, sender, reconnectThread;
+ private PairingCoordinator pairing;
  private AudioRecord recorder;
  private final Object lock=new Object();
  private static final int REQ_AUDIO=11, REQ_CONTACT=12;
@@ -127,6 +128,18 @@ public class MainActivity extends Activity {
    }
   }catch(Exception e){status.setText("Oturum geri yüklenemedi; yeniden eşleştirin");}
 
+  pairing=new PairingCoordinator(this,new PairingCoordinator.Listener(){
+   @Override public void message(String text){show(text);}
+   @Override public void paired(String host,byte[] key,String identity){runOnUiThread(()->{
+    if(talking.get())stopTalk();
+    peers=java.util.Collections.singletonList(host);peer=host;sessionKey=key;ip.setText(host);
+    verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();
+    approvedIdentityPeers.add(host);peerIdentityCodes.put(host,identity);
+    getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,identity).apply();
+    if(!selectedContactId.isEmpty())getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(selectedContactId,identity).apply();
+    SessionVault.save(MainActivity.this,host,key);updateRecipients();show("Karşılıklı onaylı eşleşme tamamlandı");testPeers();
+   });}
+  });pairing.start();
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   new Thread(()->{try{String fp=DeviceIdentity.fingerprint();runOnUiThread(()->activity.setText("Bu cihazın kimlik kodu: "+fp));}catch(Exception e){show("Cihaz kimliği oluşturulamadı");}},"device-identity").start();
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
@@ -161,16 +174,9 @@ public class MainActivity extends Activity {
   talkButton.invalidate();
  }
  private void askForPairingSecret(){
-  final EditText keyField=new EditText(this);keyField.setSingleLine(true);
-  keyField.setHint("Her iki telefonda aynı anahtar (16+ karakter)");
-  keyField.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-  new android.app.AlertDialog.Builder(this).setTitle("Yerel ağ eşleştirme")
-   .setMessage("İki telefonda aynı güçlü anahtarı girin. Rehber adı cihazın kimliğini tek başına doğrulamaz. Aynı Wi-Fi üzerinde yalnızca bir başka cihaz bulunmalıdır.")
-   .setView(keyField).setNegativeButton("Vazgeç",null)
-   .setPositiveButton("Cihaz ara",(dialog,which)->{
-    if(keyField.length()<16){show("Anahtar en az 16 karakter olmalı");return;}
-    secretInput.setText(keyField.getText().toString());scanPeers();
-   }).show();
+  new android.app.AlertDialog.Builder(this).setTitle("Kodsuz eşleşme")
+   .setMessage("Karşı telefonda Bas-Konuş uygulamasını açık tutun. Aynı Wi-Fi ağında bulunan cihaza eşleşme isteği gönderilecek. Her iki cihazdaki güvenlik kodunu karşılaştırıp Onayla seçin.")
+   .setNegativeButton("Vazgeç",null).setPositiveButton("Cihaz ara",(d,w)->scanPeers()).show();
  }
  private void startDiscoveryResponder(){
   discoveryThread=new Thread(()->{
@@ -224,12 +230,11 @@ public class MainActivity extends Activity {
     }
     runOnUiThread(()->{
      if(found.isEmpty()){status.setText("Cihaz bulunamadı. Aynı Wi-Fi ağı ve cihazların açık olması gerekir.");return;}
-     String current=ip.getText().toString().trim();
-     java.util.LinkedHashSet<String> all=new java.util.LinkedHashSet<>();
-     for(String x:current.split(",")){if(!x.trim().isEmpty())all.add(x.trim());}
-     all.addAll(found);ip.setText(String.join(",",all));
-     connectButton.performClick();
-     if(sessionKey!=null&&!peers.isEmpty())testPeers();
+     if(found.size()>1){
+      String[] addresses=found.toArray(new String[0]);
+      new android.app.AlertDialog.Builder(this).setTitle("Eşleşecek cihazı seçin")
+       .setItems(addresses,(d,which)->pairing.request(addresses[which])).show();
+     }else pairing.request(found.iterator().next());
     });
    }catch(Exception e){show("Ağ taraması başarısız: "+e.getMessage());}
   },"discovery-scan").start();
@@ -420,6 +425,7 @@ public class MainActivity extends Activity {
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
  @Override protected void onStop(){
   stopTalk();
+  if(pairing!=null)pairing.stop();
   listening=false;
   if(socket!=null)socket.close();
   if(discoverySocket!=null)discoverySocket.close();
@@ -432,6 +438,7 @@ public class MainActivity extends Activity {
  }
  @Override protected void onStart(){
   super.onStart();
+  if(pairing!=null)pairing.start();
   stopService(new Intent(this,BackgroundAudioService.class));
   if(socket==null||socket.isClosed()){
    listening=true;
