@@ -51,6 +51,7 @@ public final class BackgroundAudioService extends Service {
    int minimum=AudioTrack.getMinBufferSize(16000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
    if(minimum<=0)return;
    track=new AudioTrack(AudioManager.STREAM_MUSIC,16000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(minimum,4096),AudioTrack.MODE_STREAM);
+   track.setVolume(AudioTrack.getMaxVolume());
    track.play();
    socket=new DatagramSocket(null);
    socket.setReuseAddress(true);
