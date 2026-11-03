@@ -137,7 +137,7 @@ public class MainActivity extends Activity {
     approvedIdentityPeers.add(host);peerIdentityCodes.put(host,identity);
     getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,identity).apply();
     if(!selectedContactId.isEmpty())getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(selectedContactId,identity).apply();
-    SessionVault.save(MainActivity.this,host,key);updateRecipients();show("Karşılıklı onaylı eşleşme tamamlandı");testPeers();
+    try{SessionVault.save(MainActivity.this,host,key);}catch(Exception e){show("Eşleşme anahtarı saklanamadı");return;}updateRecipients();show("Karşılıklı onaylı eşleşme tamamlandı");testPeers();
    });}
   });pairing.start();
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
