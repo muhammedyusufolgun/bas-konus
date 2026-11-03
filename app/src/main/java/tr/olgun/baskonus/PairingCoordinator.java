@@ -38,7 +38,7 @@ public final class PairingCoordinator {
  private static String fingerprint(byte[] key)throws Exception{
   byte[] hash=MessageDigest.getInstance("SHA-256").digest(key);
   StringBuilder b=new StringBuilder();
-  for(int i=0;i<8;i++)b.append(String.format(java.util.Locale.ROOT,"%02X",hash[i]&255));
+  for(int i=0;i<16;i++){if(i>0&&i%2==0)b.append("-");b.append(String.format(java.util.Locale.ROOT,"%02X",hash[i]&255));}
   return b.toString();
  }
  private static boolean first(byte[] a,byte[] b){
