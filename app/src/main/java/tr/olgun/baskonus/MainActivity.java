@@ -74,7 +74,8 @@ public class MainActivity extends Activity {
  private final java.util.LinkedHashMap<String,Boolean> seenNonces=new java.util.LinkedHashMap<String,Boolean>(512,0.75f,true){protected boolean removeEldestEntry(java.util.Map.Entry<String,Boolean> e){return size()>2048;}};
  private final SecureRandom secureRandom=new SecureRandom();
  private volatile DatagramSocket socket;
- private Thread receiver, sender;
+ private Thread receiver, sender, reconnectThread;
+ private PairingCoordinator pairing;
  private AudioRecord recorder;
  private final Object lock=new Object();
  private static final int REQ_AUDIO=11, REQ_CONTACT=12;
@@ -108,8 +109,40 @@ public class MainActivity extends Activity {
   SharedPreferences prefs=getSharedPreferences("connection",MODE_PRIVATE);
   String savedHost=prefs.getString("peer","");
   // Do not persist the shared secret in plaintext. Re-enter after each launch.
-  if(!savedHost.isEmpty()){ip.setText(savedHost);peer=savedHost;status.setText("Önce Kişi düğmesinden eşleştirmeyi başlatın");}
+  try {
+   SessionVault.Session restored=SessionVault.load(this);
+   if(restored!=null){
+    java.util.LinkedHashSet<String> saved=new java.util.LinkedHashSet<>();
+    for(String h:restored.hosts.split(",")){
+     String host=h.trim();
+     if(host.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))saved.add(host);
+    }
+    if(!saved.isEmpty() && saved.size()<=20){
+     peers=java.util.Collections.unmodifiableList(new java.util.ArrayList<>(saved));
+     peer=String.join(",",saved);
+     sessionKey=restored.key;
+     ip.setText(peer);
+     status.setText("Kayıtlı cihazlarla bağlantı doğrulanıyor");
+     updateRecipients();
+     // Pairing approvals survive Activity recreation and process restart.
+     android.content.SharedPreferences trusted=getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE);
+     for(String host:saved)if(!trusted.getString(host,"").isEmpty())approvedIdentityPeers.add(host);
+    }
+   }
+  }catch(Exception e){status.setText("Oturum geri yüklenemedi; yeniden eşleştirin");}
 
+  pairing=new PairingCoordinator(this,new PairingCoordinator.Listener(){
+   @Override public void message(String text){show(text);}
+   @Override public void paired(String host,byte[] key,String identity){runOnUiThread(()->{
+    if(talking.get())stopTalk();
+    peers=java.util.Collections.singletonList(host);peer=host;sessionKey=key;ip.setText(host);
+    verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();
+    approvedIdentityPeers.add(host);peerIdentityCodes.put(host,identity);
+    getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,identity).apply();
+    if(!selectedContactId.isEmpty())getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(selectedContactId,identity).apply();
+    try{SessionVault.save(MainActivity.this,host,key);}catch(Exception e){show("Eşleşme anahtarı saklanamadı");return;}updateRecipients();show("Karşılıklı onaylı eşleşme tamamlandı");testPeers();
+   });}
+  });pairing.start();
   pick.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_PICK,ContactsContract.Contacts.CONTENT_URI);startActivityForResult(i,REQ_CONTACT);});
   new Thread(()->{try{String fp=DeviceIdentity.fingerprint();runOnUiThread(()->activity.setText("Bu cihazın kimlik kodu: "+fp));}catch(Exception e){show("Cihaz kimliği oluşturulamadı");}},"device-identity").start();
   connect.setOnClickListener(v->{if(talking.get()){show("Konuşurken hedef değiştirilemez");return;}String host=ip.getText().toString().trim();try{String secret=secretInput.getText().toString();if(secret.length()<16){status.setText("Eşleştirme anahtarı en az 16 karakter olmalı");return;}byte[] key=deriveKey(secret);java.util.LinkedHashSet<String> addresses=new java.util.LinkedHashSet<>();
@@ -129,30 +162,25 @@ public class MainActivity extends Activity {
    .setMessage("Her iki telefonda görünen kodun aynı olduğunu karşıdaki kişiyle doğrulayın:\n"+checkCode+"\nBu kod rehber kimliğini tek başına kanıtlamaz.")
    .setPositiveButton("Anladım",null).show();
   verifiedPeers.clear();verifiedAt.clear();pendingChallenges.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();peerIdentityCodes.clear();synchronized(seenNonces){seenNonces.clear();}
-  prefs.edit().putString("peer",peer).apply();status.setText("Hazır: "+peers.size()+" alıcı");updateRecipients();}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
+  prefs.edit().putString("peer",peer).apply();SessionVault.save(this,peer,sessionKey);status.setText("Hazır: "+peers.size()+" alıcı");updateRecipients();}catch(Exception e){peer="";peers=java.util.Collections.emptyList();sessionKey=null;status.setText("Geçerli IPv4 adreslerini ve anahtarı girin");}});
   talk.setOnTouchListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_DOWN){startTalk();setTalkColor(talking.get());return true;}if(event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL){stopTalk();setTalkColor(false);return true;}return true;});
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);
   startListening();
   startDiscoveryResponder();
+  startReconnectMonitor();
+  if(sessionKey!=null&&!peers.isEmpty())testPeers();
  }
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){stopTalk();verifiedPeers.clear();verifiedAt.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();pendingChallenges.clear();peerIdentityCodes.clear();peers=java.util.Collections.emptyList();sessionKey=null;ip.setText("");secretInput.setText("");selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
   if(talkShape==null)return;
-  talkShape.setColor(active?Color.rgb(152,226,160):Color.rgb(244,152,152));
+  talkShape.setColors(active?new int[]{Color.rgb(34,197,94),Color.rgb(34,197,94)}:new int[]{Color.rgb(255,177,177),Color.rgb(225,105,105)});
   talkShape.setStroke(dp(3),active?Color.rgb(54,143,77):Color.rgb(198,83,83));
   talkButton.invalidate();
  }
  private void askForPairingSecret(){
-  final EditText keyField=new EditText(this);keyField.setSingleLine(true);
-  keyField.setHint("Her iki telefonda aynı anahtar (16+ karakter)");
-  keyField.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-  new android.app.AlertDialog.Builder(this).setTitle("Yerel ağ eşleştirme")
-   .setMessage("İki telefonda aynı güçlü anahtarı girin. Rehber adı cihazın kimliğini tek başına doğrulamaz. Aynı Wi-Fi üzerinde yalnızca bir başka cihaz bulunmalıdır.")
-   .setView(keyField).setNegativeButton("Vazgeç",null)
-   .setPositiveButton("Cihaz ara",(dialog,which)->{
-    if(keyField.length()<16){show("Anahtar en az 16 karakter olmalı");return;}
-    secretInput.setText(keyField.getText().toString());scanPeers();
-   }).show();
+  new android.app.AlertDialog.Builder(this).setTitle("Kodsuz eşleşme")
+   .setMessage("Karşı telefonda Bas-Konuş uygulamasını açık tutun. Aynı Wi-Fi ağında bulunan cihaza eşleşme isteği gönderilecek. Her iki cihazdaki güvenlik kodunu karşılaştırıp Onayla seçin.")
+   .setNegativeButton("Vazgeç",null).setPositiveButton("Cihaz ara",(d,w)->scanPeers()).show();
  }
  private void startDiscoveryResponder(){
   discoveryThread=new Thread(()->{
@@ -206,12 +234,11 @@ public class MainActivity extends Activity {
     }
     runOnUiThread(()->{
      if(found.isEmpty()){status.setText("Cihaz bulunamadı. Aynı Wi-Fi ağı ve cihazların açık olması gerekir.");return;}
-     String current=ip.getText().toString().trim();
-     java.util.LinkedHashSet<String> all=new java.util.LinkedHashSet<>();
-     for(String x:current.split(",")){if(!x.trim().isEmpty())all.add(x.trim());}
-     all.addAll(found);ip.setText(String.join(",",all));
-     connectButton.performClick();
-     if(sessionKey!=null&&!peers.isEmpty())testPeers();
+     if(found.size()>1){
+      String[] addresses=found.toArray(new String[0]);
+      new android.app.AlertDialog.Builder(this).setTitle("Eşleşecek cihazı seçin")
+       .setItems(addresses,(d,which)->pairing.request(addresses[which])).show();
+     }else pairing.request(found.iterator().next());
     });
    }catch(Exception e){show("Ağ taraması başarısız: "+e.getMessage());}
   },"discovery-scan").start();
@@ -221,6 +248,31 @@ public class MainActivity extends Activity {
   StringBuilder out=new StringBuilder("Yayın hedefleri ("+peers.size()+")");
   for(String host:peers)out.append("\n• ").append(host);
   recipientsView.setText(out.toString());
+ }
+ private void startReconnectMonitor(){
+  reconnectThread=new Thread(()->{
+   while(listening){
+    try{
+     Thread.sleep(5000);
+     if(!listening || talking.get() || sessionKey==null || peers.isEmpty())continue;
+     DatagramSocket ds=socket;
+     if(ds==null || ds.isClosed())continue;
+     for(String host:peers){
+      if(isPeerVerified(host))continue;
+      try{
+       byte[] challenge=new byte[16];
+       secureRandom.nextBytes(challenge);
+       pendingChallenges.put(host,challenge);
+       verificationStartedAt=android.os.SystemClock.elapsedRealtime();
+       byte[] plain=identityPacket(PING,challenge);
+       byte[] packet=encrypt(plain,plain.length);
+       ds.send(new DatagramPacket(packet,packet.length,InetAddress.getByName(host),PORT));
+      }catch(Exception ignored){}
+     }
+    }catch(InterruptedException e){Thread.currentThread().interrupt();break;}
+   }
+  },"reconnect-monitor");
+  reconnectThread.start();
  }
  private void testPeers(){
   if(sessionKey==null||peers.isEmpty()){show("Önce hedefleri ve ortak anahtarı ayarlayın");return;}
@@ -238,7 +290,7 @@ public class MainActivity extends Activity {
      InetAddress address=InetAddress.getByName(host);
      ds.send(new DatagramPacket(request,request.length,address,PORT));
     }
-    show("Doğrulama isteği gönderildi; karşı telefonda da Kişi üzerinden eşleştirme yapılmalı.");
+    show("Kayıtlı cihaz otomatik doğrulanıyor...");
    }catch(Exception e){show("Doğrulama gönderilemedi: "+e.getMessage());}
   },"verify-peers").start();
  }
@@ -267,13 +319,20 @@ public class MainActivity extends Activity {
  private void confirmIdentity(String host,String code){
   final String contactId=selectedContactId;
   final String contactName=selectedContactName;
-  if(contactId.isEmpty()){show("Rehberden kişi seçilmeden kimlik onaylanamaz");return;}
+  if(contactId.isEmpty()){
+   String trusted=getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).getString(host,"");
+   if(!trusted.isEmpty() && trusted.equals(code)){
+    approvedIdentityPeers.add(host);
+    return;
+   }
+   show("Bilinmeyen cihaz; yeniden rehberden eşleştirin");return;
+  }
   String stored=getSharedPreferences("trusted_devices",MODE_PRIVATE).getString(contactId,"");
   if(!stored.isEmpty()&&!stored.equals(code)){
    approvedIdentityPeers.remove(host);verifiedPeers.remove(host);verifiedAt.remove(host);
    show("Cihaz kimliği değişti! Eşleştirme reddedildi.");return;
   }
-  if(!stored.isEmpty()){approvedIdentityPeers.add(host);show("Kayıtlı cihaz kimliği doğrulandı");return;}
+  if(!stored.isEmpty()){approvedIdentityPeers.add(host);getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,code).apply();show("Kayıtlı cihaz kimliği doğrulandı");return;}
   if(!pendingIdentityApprovals.add(host))return;
   runOnUiThread(()->{
    if(isFinishing()||isDestroyed()){pendingIdentityApprovals.remove(host);return;}
@@ -288,6 +347,7 @@ public class MainActivity extends Activity {
        show("Eşleştirme değişti; yeniden deneyin");return;
       }
       getSharedPreferences("trusted_devices",MODE_PRIVATE).edit().putString(contactId,code).apply();
+      getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE).edit().putString(host,code).apply();
       approvedIdentityPeers.add(host);show("Cihaz kimliği kişiyle ilişkilendirildi");
     })
     .setOnDismissListener(d->pendingIdentityApprovals.remove(host)).show();
@@ -298,7 +358,7 @@ public class MainActivity extends Activity {
    int min=AudioTrack.getMinBufferSize(RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
    if(min<=0)throw new IOException("Ses çıkışı desteklenmiyor: "+min);
    AudioTrack track=new AudioTrack(AudioManager.STREAM_MUSIC,RATE,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096),AudioTrack.MODE_STREAM);
-   applyAudioRoute();track.play();byte[] buf=new byte[1400];
+   applyAudioRoute();track.setVolume(AudioTrack.getMaxVolume());track.play();byte[] buf=new byte[1400];
    while(listening){try{DatagramPacket packet=new DatagramPacket(buf,buf.length);socket.receive(packet);
     if(!peers.isEmpty()&&sessionKey!=null&&peers.contains(packet.getAddress().getHostAddress())){try{byte[] plain=decrypt(packet.getData(),packet.getOffset(),packet.getLength());if(plain.length>=26&&Arrays.equals(Arrays.copyOfRange(plain,0,4),PING)){
      String host=packet.getAddress().getHostAddress();
@@ -317,13 +377,26 @@ public class MainActivity extends Activity {
       verifiedPeers.add(host);verifiedAt.put(host,android.os.SystemClock.elapsedRealtime());confirmIdentity(host,identity);
      }continue;
     }
-    if(talking.get()||plain.length<2||plain.length>640||plain.length%2!=0||!isPeerVerified(packet.getAddress().getHostAddress()))continue;track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
+    if(talking.get()||plain.length<2||plain.length>640||plain.length%2!=0||!isPeerVerified(packet.getAddress().getHostAddress()))continue;boostPcm(plain,plain.length);track.write(plain,0,plain.length);long now=android.os.SystemClock.elapsedRealtime();if(now-lastReceivedAt>1500){lastReceivedAt=now;runOnUiThread(()->activity.setText("Ses alınıyor: "+packet.getAddress().getHostAddress()));}}catch(Exception ignored){}}
    }catch(SocketTimeoutException ignored){}catch(Exception e){if(listening)show("Alım hatası: "+e.getMessage());}}
-   track.stop();track.release();
+   try{if(track.getPlayState()==AudioTrack.PLAYSTATE_PLAYING)track.stop();}catch(Exception ignored){}track.release();
   }catch(Exception e){show("Dinleme başlatılamadı: "+e.getMessage());}finally{if(socket!=null)socket.close();}
  });receiver.start();}
  private boolean isPeerVerified(String host){Long at=verifiedAt.get(host);return at!=null&&android.os.SystemClock.elapsedRealtime()-at<VERIFICATION_TTL_MS&&verifiedPeers.contains(host)&&approvedIdentityPeers.contains(host);}
- private void applyAudioRoute(){if(audioManager==null)return;audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);audioManager.setSpeakerphoneOn(true);}
+ private void applyAudioRoute(){
+  if(audioManager==null)return;
+  // Media stream follows the phone's media-volume slider, not the quiet call/earpiece route.
+  try{audioManager.setMode(AudioManager.MODE_NORMAL);audioManager.setSpeakerphoneOn(true);}
+  catch(RuntimeException e){android.util.Log.w("BasKonus","Audio route unavailable",e);}
+ }
+ private static void boostPcm(byte[] data,int length){
+  // Software gain with 16-bit saturation; avoid integer wraparound/distortion.
+  for(int i=0;i+1<length;i+=2){
+   int sample=(short)((data[i]&255)|(data[i+1]<<8));
+   int amplified=Math.max(-32768,Math.min(32767,Math.round(sample*2.0f)));
+   data[i]=(byte)amplified;data[i+1]=(byte)(amplified>>>8);
+  }
+ }
  private void startTalk(){if(peers.isEmpty()||sessionKey==null){show("Önce Kişi üzerinden eşleştirme yapın");return;}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_AUDIO);return;}
   boolean anyVerified=false;for(String host:peers){if(isPeerVerified(host)){anyVerified=true;break;}}
@@ -334,11 +407,11 @@ public class MainActivity extends Activity {
   sender=new Thread(()->{AudioRecord rec=null;DatagramSocket out=null;try{
    int min=AudioRecord.getMinBufferSize(RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
    if(min<=0)throw new IOException("Mikrofon biçimi desteklenmiyor: "+min);
-   rec=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
+   rec=new AudioRecord(MediaRecorder.AudioSource.MIC,RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min,4096));
    if(rec.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Mikrofon açılamadı");
    synchronized(lock){recorder=rec;}out=new DatagramSocket();java.util.List<InetAddress> targets=new java.util.ArrayList<>();for(String host:peers)if(isPeerVerified(host))targets.add(InetAddress.getByName(host));byte[] data=new byte[640];rec.startRecording();
    while(talking.get()){int n=rec.read(data,0,data.length);if(n>0){byte[] encrypted=encrypt(data,n);int delivered=0;for(InetAddress address:targets){if(isPeerVerified(address.getHostAddress())){out.send(new DatagramPacket(encrypted,encrypted.length,address,PORT));delivered++;}}if(delivered==0){show("Tüm bağlantı doğrulamalarının süresi doldu");break;}}else if(n<0){if(!talking.get())break;throw new IOException("Mikrofon okuma hatası: "+n);}}
-  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);}});
+  }catch(Exception e){show("Gönderim hatası: "+e.getMessage());}finally{talking.set(false);if(rec!=null){try{if(rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING)rec.stop();}catch(Exception ignored){}rec.release();}synchronized(lock){recorder=null;}if(out!=null)out.close();transmitting.set(false);runOnUiThread(()->setTalkColor(false));}});
   sender.start();
  }
  private byte[] deriveKey(String password)throws Exception {
@@ -367,5 +440,28 @@ public class MainActivity extends Activity {
  }
  private void stopTalk(){boolean wasTalking=talking.getAndSet(false);synchronized(lock){if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}}if(wasTalking)show("Dinlemede");}
  private void show(String s){runOnUiThread(()->{if(!isFinishing())status.setText(s);});}
- @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(audioManager!=null){audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}super.onDestroy();}
+ @Override protected void onStop(){
+  stopTalk();
+  if(pairing!=null)pairing.stop();
+  listening=false;
+  if(socket!=null)socket.close();
+  if(discoverySocket!=null)discoverySocket.close();
+  if(reconnectThread!=null)reconnectThread.interrupt();
+  // No background audio listener: voice is played live only while the app is open.
+  stopService(new Intent(this,BackgroundAudioService.class));
+  super.onStop();
+ }
+ @Override protected void onStart(){
+  super.onStart();
+  if(pairing!=null)pairing.start();
+  stopService(new Intent(this,BackgroundAudioService.class));
+  if(socket==null||socket.isClosed()){
+   listening=true;
+   startListening();
+   startDiscoveryResponder();
+   startReconnectMonitor();
+   if(sessionKey!=null&&!peers.isEmpty())testPeers();
+  }
+ }
+ @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(reconnectThread!=null)reconnectThread.interrupt();if(audioManager!=null){try{audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}catch(RuntimeException ignored){}}super.onDestroy();}
 }
