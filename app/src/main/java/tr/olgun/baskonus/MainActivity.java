@@ -124,6 +124,9 @@ public class MainActivity extends Activity {
      ip.setText(peer);
      status.setText("Kayıtlı cihazlarla bağlantı doğrulanıyor");
      updateRecipients();
+     // Pairing approvals survive Activity recreation and process restart.
+     android.content.SharedPreferences trusted=getSharedPreferences("trusted_peer_hosts",MODE_PRIVATE);
+     for(String host:saved)if(!trusted.getString(host,"").isEmpty())approvedIdentityPeers.add(host);
     }
    }
   }catch(Exception e){status.setText("Oturum geri yüklenemedi; yeniden eşleştirin");}
@@ -165,6 +168,7 @@ public class MainActivity extends Activity {
   startListening();
   startDiscoveryResponder();
   startReconnectMonitor();
+  if(sessionKey!=null&&!peers.isEmpty())testPeers();
  }
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==REQ_CONTACT&&result==RESULT_OK&&data!=null){Uri uri=data.getData();if(uri!=null){try(Cursor c=getContentResolver().query(uri,new String[]{ContactsContract.Contacts.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst()){stopTalk();verifiedPeers.clear();verifiedAt.clear();approvedIdentityPeers.clear();pendingIdentityApprovals.clear();pendingChallenges.clear();peerIdentityCodes.clear();peers=java.util.Collections.emptyList();sessionKey=null;ip.setText("");secretInput.setText("");selectedContactName=c.getString(0);selectedContactId=uri.toString();contact.setText("Kişi: "+selectedContactName);askForPairingSecret();}}}}}
  private void setTalkColor(boolean active){
@@ -249,7 +253,7 @@ public class MainActivity extends Activity {
   reconnectThread=new Thread(()->{
    while(listening){
     try{
-     Thread.sleep(30000);
+     Thread.sleep(5000);
      if(!listening || talking.get() || sessionKey==null || peers.isEmpty())continue;
      DatagramSocket ds=socket;
      if(ds==null || ds.isClosed())continue;
@@ -286,7 +290,7 @@ public class MainActivity extends Activity {
      InetAddress address=InetAddress.getByName(host);
      ds.send(new DatagramPacket(request,request.length,address,PORT));
     }
-    show("Doğrulama isteği gönderildi; karşı telefonda da Kişi üzerinden eşleştirme yapılmalı.");
+    show("Kayıtlı cihaz otomatik doğrulanıyor...");
    }catch(Exception e){show("Doğrulama gönderilemedi: "+e.getMessage());}
   },"verify-peers").start();
  }
@@ -443,10 +447,8 @@ public class MainActivity extends Activity {
   if(socket!=null)socket.close();
   if(discoverySocket!=null)discoverySocket.close();
   if(reconnectThread!=null)reconnectThread.interrupt();
-  if(sessionKey!=null&&!peers.isEmpty()){
-   Intent background=new Intent(this,BackgroundAudioService.class);
-   try{startForegroundService(background);}catch(Exception e){android.util.Log.w("BasKonus","Service unavailable",e);}
-  }
+  // No background audio listener: voice is played live only while the app is open.
+  stopService(new Intent(this,BackgroundAudioService.class));
   super.onStop();
  }
  @Override protected void onStart(){
@@ -458,6 +460,7 @@ public class MainActivity extends Activity {
    startListening();
    startDiscoveryResponder();
    startReconnectMonitor();
+   if(sessionKey!=null&&!peers.isEmpty())testPeers();
   }
  }
  @Override protected void onDestroy(){listening=false;stopTalk();if(socket!=null)socket.close();if(discoverySocket!=null)discoverySocket.close();if(reconnectThread!=null)reconnectThread.interrupt();if(audioManager!=null){try{audioManager.setSpeakerphoneOn(originalSpeakerphone);audioManager.setMode(originalAudioMode);}catch(RuntimeException ignored){}}super.onDestroy();}
