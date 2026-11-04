@@ -35,7 +35,7 @@ public final class BackgroundAudioService extends Service {
   Notification.Builder builder=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
   Notification notification=builder.setContentTitle("Bas-Konuş").setContentText("Arka planda ses alımı etkin")
    .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off).setOngoing(true).build();
-  startForeground(71,notification);
+  try{startForeground(71,notification);}catch(RuntimeException e){android.util.Log.e("BasKonus","Foreground playback unavailable",e);stopSelf(startId);return START_NOT_STICKY;}
   if(running)return START_STICKY;
   running=true;
   worker=new Thread(this::receive,"background-audio");
@@ -51,6 +51,7 @@ public final class BackgroundAudioService extends Service {
    int minimum=AudioTrack.getMinBufferSize(16000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
    if(minimum<=0)return;
    track=new AudioTrack(AudioManager.STREAM_MUSIC,16000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(minimum,4096),AudioTrack.MODE_STREAM);
+   if(track.getState()!=AudioTrack.STATE_INITIALIZED)return;
    track.setVolume(AudioTrack.getMaxVolume());
    track.play();
    socket=new DatagramSocket(null);
@@ -70,13 +71,20 @@ public final class BackgroundAudioService extends Service {
      cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(session.key,"AES"),new GCMParameterSpec(128,packet.getData(),packet.getOffset(),12));
      byte[] audio=cipher.doFinal(packet.getData(),packet.getOffset()+12,packet.getLength()-12);
      if(audio.length<2||audio.length>640||audio.length%2!=0)continue;
-     track.write(audio,0,audio.length);
+     boostPcm(audio);track.write(audio,0,audio.length);
     }catch(java.net.SocketTimeoutException ignored){}catch(Exception ignored){}
    }
-  }catch(Exception ignored){}finally{
+  }catch(Exception e){android.util.Log.e("BasKonus","Background receiver stopped",e);}finally{
    if(socket!=null)socket.close();
-   if(track!=null){try{track.stop();}catch(Exception ignored){}track.release();}
+   if(track!=null){try{if(track.getPlayState()==AudioTrack.PLAYSTATE_PLAYING)track.stop();}catch(Exception ignored){}try{track.release();}catch(Exception ignored){}}
    stopSelf();
+  }
+ }
+ private static void boostPcm(byte[] audio){
+  for(int i=0;i+1<audio.length;i+=2){
+   int sample=(short)((audio[i]&255)|(audio[i+1]<<8));
+   int amplified=Math.max(-32768,Math.min(32767,Math.round(sample*2.0f)));
+   audio[i]=(byte)amplified;audio[i+1]=(byte)(amplified>>>8);
   }
  }
  @Override public void onDestroy(){
